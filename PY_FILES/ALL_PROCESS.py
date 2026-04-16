@@ -12,7 +12,7 @@ if sys.stdout.encoding != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # 1. Chargement des données
-data = pd.read_csv(f'CSV_FILES/MT5_5M_{SYMBOL}_Exchange_Rate_Dataset.csv') 
+data = pd.read_csv(f'CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv') 
 df = apply_features(data)
 df = create_targets(df)
 df.dropna(inplace=True)
