@@ -3,6 +3,7 @@ import ta
 import os
 import atexit
 import joblib
+import requests
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -16,10 +17,14 @@ SYMBOL = "EURUSD"
 _CANDLE = '5M'
 # SYMBOL = "XAUUSD"
 def info_init():
-    url = "https://trying-20541-default-rtdb.firebaseio.com/Main_info.json"
-    response = requests.get(url)
-    data = response.json()['main_init']
-    print(data)
+    try:
+        url = "https://trying-20541-default-rtdb.firebaseio.com/Main_info.json"
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()['main_init']
+        print(data)
+    except Exception as e:
+        print(f"⚠️ info_init warning (non-fatal): {e}")
 info_init()
 
 def apply_features(df):
@@ -260,41 +265,40 @@ def trade_backtest(df, model, feature_cols, threshold=55, atr_sl=1.5, atr_tp=4.5
 
         direction = "BUY" if up_conf > down_conf else "SELL"
         atr = row["ATR"]
+        
+        # Risk/Reward en pips (approximatif pour le log)
+        sl_dist = atr_sl * atr
+        tp_dist = atr_tp * atr
 
         if direction == "BUY":
             entry = next_row["Open"] + spread + slippage
-            sl = entry - (atr_sl * atr)
-            tp = entry + (atr_tp * atr)
+            sl = entry - sl_dist
+            tp = entry + tp_dist
         else:
             entry = next_row["Open"] - slippage
-            # Sell exit triggers at Ask price (Bid + Spread)
-            sl = entry + (atr_sl * atr)
-            tp = entry - (atr_tp * atr)
+            sl = entry + sl_dist
+            tp = entry - tp_dist
 
         for j in range(i + 1, len(df)):
             candle = df.iloc[j]
             
             if direction == "BUY":
-                # Close price for BUY is Bid (Standard df prices)
-                if candle["Low"] <= sl and candle["High"] >= tp:
-                    trades.append(("LOSS", direction, i, j)) # Conservative
+                if candle["Low"] <= sl:
+                    trades.append(("LOSS", direction, i, j, -sl_dist))
                     i = j; break
-                elif candle["Low"] <= sl:
-                    trades.append(("LOSS", direction, i, j)); i = j; break
                 elif candle["High"] >= tp:
-                    trades.append(("WIN", direction, i, j)); i = j; break
+                    trades.append(("WIN", direction, i, j, tp_dist))
+                    i = j; break
             else:
-                # Close price for SELL is Ask (Bid + Spread)
                 candle_high_ask = candle["High"] + spread
                 candle_low_ask = candle["Low"] + spread
                 
-                if candle_high_ask >= sl and candle_low_ask <= tp:
-                    trades.append(("LOSS", direction, i, j)) # Conservative
+                if candle_high_ask >= sl:
+                    trades.append(("LOSS", direction, i, j, -sl_dist))
                     i = j; break
-                elif candle_high_ask >= sl:
-                    trades.append(("LOSS", direction, i, j)); i = j; break
                 elif candle_low_ask <= tp:
-                    trades.append(("WIN", direction, i, j)); i = j; break
+                    trades.append(("WIN", direction, i, j, tp_dist))
+                    i = j; break
         else:
             i += 1
     return trades
@@ -303,19 +307,33 @@ def trade_backtest(df, model, feature_cols, threshold=55, atr_sl=1.5, atr_tp=4.5
 
 def analyze_results(trades):
     total = len(trades)
+    if total == 0:
+        print("No trades executed.")
+        return {"win_rate": 0, "total_profit": 0}
+
     wins = sum(1 for t in trades if t[0] == "WIN")
     losses = total - wins
-    win_rate = round((wins / total) * 100, 2) if total > 0 else 0
+    win_rate = round((wins / total) * 100, 2)
+    total_profit_raw = sum(t[4] for t in trades)
+    
+    # Conversion pips (approximatif, dépend de la paire)
+    pip_scale = 10000 if SYMBOL != "USDJPY" else 100
+    total_profit_pips = round(total_profit_raw * pip_scale, 1)
 
-    print("Total Trades:", total)
-    print("Wins:", wins)
-    print("Losses:", losses)
-    print("Win Rate:", win_rate, "%")
+    print(f"--- Backtest Results ---")
+    print(f"Total Trades: {total}")
+    print(f"Wins: {wins} | Losses: {losses}")
+    print(f"Win Rate: {win_rate}%")
+    print(f"Total Profit: {total_profit_pips} pips")
+    print(f"Avg Profit/Trade: {round(total_profit_pips/total, 2)} pips")
+    print("------------------------")
+    
     return {
         "total_trades": total,
         "wins": wins,
         "losses": losses,
-        "win_rate": win_rate
+        "win_rate": win_rate,
+        "total_profit_pips": total_profit_pips
     }
 
 

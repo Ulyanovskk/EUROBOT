@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import mplfinance as mpf
 from lightgbm import LGBMClassifier
-from main import apply_features
+from func import apply_features
 
 
 
