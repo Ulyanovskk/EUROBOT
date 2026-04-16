@@ -23,6 +23,7 @@ print(f"🚀 Bot started for {SYMBOL}...")
 DAILY_LOSS_LIMIT_PCT = 20.0  # Seuil augmenté pour supporter les lots minimum de 0.01
 starting_daily_balance = mt5.account_info().balance
 current_day = datetime.now().date()
+last_known_positions = [] # Pour suivre les fermetures
 
 try:
     while True:
@@ -85,9 +86,32 @@ try:
         
         print(f"\n🔍 Confiance: UP {up_moves_mean}% | DOWN {down_moves_mean}%")
 
-        # Vérification des positions ouvertes
-        positions = mt5.positions_get(symbol=SYMBOL)
-        has_position = len(positions) > 0
+        # --- SURVEILLANCE DES FERMETURES ---
+        current_positions = mt5.positions_get(symbol=SYMBOL)
+        current_ticket_ids = [p.ticket for p in current_positions] if current_positions else []
+        
+        # Si on avait une position et qu'on ne l'a plus
+        for old_ticket in last_known_positions:
+            if old_ticket not in current_ticket_ids:
+                # La position a été fermée ! On récupère le résultat
+                from datetime import datetime, timedelta
+                history = mt5.history_deals_get(datetime.now() - timedelta(minutes=5), datetime.now())
+                if history:
+                    for deal in history:
+                        if deal.position_id == old_ticket and deal.entry == mt5.DEAL_ENTRY_OUT:
+                            profit = deal.profit + deal.commission + deal.swap
+                            emoji = "💰" if profit > 0 else "📉"
+                            msg = (f"{emoji} *TRADE FERMÉ - {SYMBOL}*\n\n"
+                                   f"Ticket : `{old_ticket}`\n"
+                                   f"Résultat : *{round(profit, 2)} €*\n"
+                                   f"Balance : `{mt5.account_info().balance} €`")
+                            from func import send_telegram_message
+                            send_telegram_message(msg)
+        
+        last_known_positions = current_ticket_ids
+        # ------------------------------------
+
+        has_position = len(current_positions) > 0
 
         if has_position:
             print(f"ℹ️ Position déjà ouverte sur {SYMBOL}. En attente...")
