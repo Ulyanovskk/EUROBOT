@@ -5,6 +5,8 @@ import MetaTrader5 as mt5
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
+from PY_FILES.func import SYMBOL
+
 # ==========================================
 # CONFIGURATION
 # ==========================================
@@ -81,9 +83,9 @@ async def get_positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Erreur MT5")
         return
     
-    positions = mt5.positions_get(symbol="EURUSD")
+    positions = mt5.positions_get(symbol=SYMBOL)
     if not positions:
-        await update.message.reply_text("ℹ️ Aucune position ouverte sur EURUSD.")
+        await update.message.reply_text(f"ℹ️ Aucune position ouverte sur {SYMBOL}.")
     else:
         msg = "🎯 **POSITIONS ACTIVES :**\n\n"
         for p in positions:
@@ -280,7 +282,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
 
                 current_task_name = "Backtest (Run)"
-                last_status_msg = "Calcul..."
+                last_status_msg = "Analyse des stratégies..."
                 p2 = await asyncio.create_subprocess_exec("python", "PY_FILES/ALL_BACKTEST.py", stdout=asyncio.subprocess.PIPE)
                 current_process = p2
                 while True:
@@ -288,8 +290,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if not line: break
                     text = line.decode('utf-8', errors='replace').strip()
                     if text: last_status_msg = text
-                await p2.wait()
-                await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"✅ Backtest terminé.")
+
+                return_code = await p2.wait()
+                if return_code == 0:
+                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"✅ Backtest terminé avec succès.")
+                else:
+                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"❌ Le backtest a échoué (Code: {return_code}). Vérifiez les logs.")
             except Exception as e:
                 await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"❌ Erreur: {str(e)}")
             finally:

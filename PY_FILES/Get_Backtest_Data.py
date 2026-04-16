@@ -16,6 +16,11 @@ def get_90_days_data():
     print(f"📥 Downloading last 90 days of data for {SYMBOL}...")
     print(f"Period: {start_date.date()} to {end_date.date()}")
 
+    # S'assurer que le symbole est présent dans le MarketWatch
+    if not mt5.symbol_select(SYMBOL, True):
+        print(f"❌ Failed to select {SYMBOL}")
+        return
+
     # Récupération des données en 5 minutes
     timeframe = mt5.TIMEFRAME_M5
     rates = mt5.copy_rates_range(SYMBOL, timeframe, start_date, end_date)

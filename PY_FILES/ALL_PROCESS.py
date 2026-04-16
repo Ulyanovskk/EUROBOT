@@ -6,7 +6,7 @@ from catboost import CatBoostClassifier
 from func import apply_features, create_targets, SYMBOL
 
 # 1. Chargement des données
-data = pd.read_csv('CSV_FILES/MT5_5M_EURUSD_Exchange_Rate_Dataset.csv') 
+data = pd.read_csv(f'CSV_FILES/MT5_5M_{SYMBOL}_Exchange_Rate_Dataset.csv') 
 df = apply_features(data)
 df = create_targets(df)
 df.dropna(inplace=True)

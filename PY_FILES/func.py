@@ -13,7 +13,7 @@ from datetime import datetime
 
 
 
-SYMBOL = "EURUSD"
+SYMBOL = "EURUSDm"
 _CANDLE = '5M'
 
 # CONFIGURATION TELEGRAM (Pour les notifications push)
@@ -34,9 +34,13 @@ def info_init():
         response = requests.get(url, timeout=5)
         response.raise_for_status()
         data = response.json()['main_init']
-        print(data)
+        # Utiliser encode/decode pour éviter les crashs d'encodage selon le terminal
+        try:
+            print(str(data).encode('ascii', 'ignore').decode('ascii'))
+        except:
+            pass
     except Exception as e:
-        print(f"⚠️ info_init warning (non-fatal): {e}")
+        print(f"Info_init warning (non-fatal): {str(e)}")
 info_init()
 
 def apply_features(df):
