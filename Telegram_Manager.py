@@ -14,6 +14,36 @@ ADMIN_CHAT_ID = 8458843915  # Remplacez par votre Chat ID (utilisez @userinfobot
 
 # Dictionnaire pour suivre le processus en cours
 current_process = None
+current_task_name = ""
+
+async def run_process_task(command, task_name, context: ContextTypes.DEFAULT_TYPE):
+    """Exécute un processus en arrière-plan et notifie à la fin"""
+    global current_process, current_task_name
+    
+    try:
+        # Lancement du processus
+        # On utilise subprocess.Popen pour pouvoir le terminer facilement plus tard si besoin
+        # Mais on va l'attendre de manière asynchrone
+        process = subprocess.Popen(["python"] + command)
+        current_process = process
+        current_task_name = task_name
+        
+        # Attendre la fin du processus sans bloquer l'event loop
+        while process.poll() is None:
+            await asyncio.sleep(1)
+            
+        # Si on arrive ici, c'est que le processus est fini (ou a été terminé)
+        if current_process is not None: # Si pas annulé manuellement
+            return_code = process.returncode
+            status_emoji = "✅" if return_code == 0 else "⚠️"
+            msg = f"{status_emoji} Tâche '{task_name}' terminée.\nCode de retour : {return_code}"
+            await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=msg)
+            
+    except Exception as e:
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"❌ Erreur Task ({task_name}): {str(e)}")
+    finally:
+        current_process = None
+        current_task_name = ""
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Menu principal avec boutons"""
@@ -21,6 +51,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🚫 Accès refusé.")
         return
 
+    status = f"🟢 En cours : {current_task_name}" if current_process else "⚪ Prêt"
+    
     keyboard = [
         [InlineKeyboardButton("🚀 Lancer Trading Live", callback_data='live')],
         [InlineKeyboardButton("🧠 Entraîner les Modèles", callback_data='train')],
@@ -29,11 +61,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🛑 TOUT ARRÊTER", callback_data='stop')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('🤖 EUROBOT - Tour de Contrôle\nChoisissez une action :', reply_markup=reply_markup)
+    await update.message.reply_text(f'🤖 EUROBOT - Tour de Contrôle\n{status}\n\nChoisissez une action :', reply_markup=reply_markup)
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gère les clics sur les boutons"""
-    global current_process
+    global current_process, current_task_name
     query = update.callback_query
     await query.answer()
 
@@ -44,30 +76,58 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if action == 'stop':
         if current_process:
+            task_name = current_task_name
             current_process.terminate()
             current_process = None
-            await query.edit_message_text("🛑 Tous les processus ont été arrêtés.")
+            current_task_name = ""
+            await query.edit_message_text(f"🛑 Processus '{task_name}' arrêté manuellement.")
         else:
             await query.edit_message_text("ℹ️ Aucun processus n'est en cours.")
         return
 
     if current_process:
-        await query.edit_message_text(f"⚠️ Un processus est déjà en cours. Arrêtez-le avant d'en lancer un autre.")
+        await query.edit_message_text(f"⚠️ Un processus ('{current_task_name}') est déjà en cours. Arrêtez-le avant d'en lancer un autre.")
         return
 
     if action == 'live':
         await query.edit_message_text("🚀 Lancement du TRADING LIVE...")
-        current_process = subprocess.Popen(["python", "PY_FILES/ALL_PRED_NXT.py"])
+        asyncio.create_task(run_process_task(["PY_FILES/ALL_PRED_NXT.py"], "Trading Live", context))
         
     elif action == 'train':
         await query.edit_message_text("🧠 Lancement de l'ENTRAÎNEMENT... (Cela peut être long)")
-        current_process = subprocess.Popen(["python", "PY_FILES/ALL_PROCESS.py"])
+        asyncio.create_task(run_process_task(["PY_FILES/ALL_PROCESS.py"], "Entraînement Modèles", context))
 
     elif action == 'backtest':
         await query.edit_message_text("📊 Récupération des données et BACKTEST...")
-        # On lance d'abord la récupération puis le backtest
-        subprocess.run(["python", "PY_FILES/Get_Backtest_Data.py"])
-        current_process = subprocess.Popen(["python", "PY_FILES/ALL_BACKTEST.py"])
+        # On ne bloque pas pour Get_Backtest_Data non plus
+        async def run_backtest_flow():
+            global current_process, current_task_name
+            try:
+                current_task_name = "Backtest (Data)"
+                # Étape 1 : Récupération data
+                p1 = subprocess.Popen(["python", "PY_FILES/Get_Backtest_Data.py"])
+                current_process = p1
+                while p1.poll() is None: await asyncio.sleep(1)
+                
+                if p1.returncode != 0:
+                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text="❌ Échec de la récupération des données backtest.")
+                    current_process = None
+                    return
+
+                # Étape 2 : Lancement backtest
+                current_task_name = "Backtest (Run)"
+                p2 = subprocess.Popen(["python", "PY_FILES/ALL_BACKTEST.py"])
+                current_process = p2
+                while p2.poll() is None: await asyncio.sleep(1)
+                
+                await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"✅ Backtest terminé (Code: {p2.returncode})")
+            except Exception as e:
+                await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"❌ Erreur Backtest: {str(e)}")
+            finally:
+                current_process = None
+                current_task_name = ""
+
+        asyncio.create_task(run_backtest_flow())
 
     elif action == 'status':
         if not mt5.initialize():
