@@ -1,46 +1,57 @@
-
 import ta
 import joblib
 import numpy as np
 import pandas as pd
-import mplfinance as mpf
-from lightgbm import LGBMClassifier
-from func import apply_features,create_targets,SYMBOL
+from catboost import CatBoostClassifier
+from func import apply_features, create_targets, SYMBOL
 
-
-
-
-
-
-
-
-
+# 1. Chargement des données
 data = pd.read_csv('CSV_FILES/MT5_5M_EURUSD_Exchange_Rate_Dataset.csv') 
 df = apply_features(data)
 df = create_targets(df)
 df.dropna(inplace=True)
 
-all_target = ['T_5M','T_10M','T_15M','T_20M','T_30M']
+all_target = ['T_5M', 'T_10M', 'T_15M', 'T_20M', 'T_30M']
 train_df = df.copy()
 X_train = train_df.drop(columns=all_target)
 
+# 2. Boucle d'entraînement pour chaque Timeframe
 for target in all_target:
+    print(f'🚀 Entraînement CatBoost pour la cible : {target}...')
     y_train = train_df[target]
-    model = LGBMClassifier(n_estimators=200,random_state=42)
+    
+    # Premier passage pour identifier les meilleures features
+    model = CatBoostClassifier(
+        iterations=200,
+        random_seed=42,
+        logging_level='Silent',
+        allow_writing_files=False
+    )
+    
     model.fit(X_train, y_train)
-    importance = model.feature_importances_
+    importance = model.get_feature_importance()
     feature_names = X_train.columns.to_list()
     sort_indx = np.argsort(importance)[::-1]
 
+    # On garde les 76 meilleures features
     top_76_indx = sort_indx[:76]
     top76_features = [feature_names[i] for i in top_76_indx]
-    print(f'TOP 76 FEATURES : ',top76_features)
+    print(f'✅ TOP 76 FEATURES sélectionnées pour {target}.')
 
-    # Reduce training data
+    # Réentraînement final avec les meilleures features uniquement
     X_train_top76 = X_train[top76_features]
-    model_top76 = LGBMClassifier(n_estimators=200,random_state=42)
+    model_top76 = CatBoostClassifier(
+        iterations=200,
+        random_seed=42,
+        logging_level='Silent',
+        allow_writing_files=False
+    )
     model_top76.fit(X_train_top76, y_train)
 
-    joblib.dump({"model": model_top76,"features": top76_features}, f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
-    print(f'Model for {target} trained and saved.')
+    # Sauvegarde du modèle (bundle)
+    # Note: On garde le nom "lgbm" dans le fichier pour ne pas avoir à modifier les autres scripts
+    joblib.dump({"model": model_top76, "features": top76_features}, f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
+    print(f'💾 Modèle enregistré : ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl')
     print('-------------------------------------')
+
+print("✨ Entraînement de tous les modèles terminé avec succès (Moteur: CatBoost).")
