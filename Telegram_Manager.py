@@ -36,26 +36,30 @@ async def run_process_task(command, task_name, context: ContextTypes.DEFAULT_TYP
     """Exécute un processus en arrière-plan et capture la sortie pour le suivi"""
     global current_process, current_task_name, last_status_msg, log_buffer
     
-    log_buffer = [f"--- Démarrage de {task_name} ---"]
+    log_buffer = [f"--- Demarrage de {task_name} ---"]
     try:
+        # Utilisation de -u pour forcer l'affichage instantané (unbuffered)
         process = await asyncio.create_subprocess_exec(
-            "python", *command,
+            "python", "-u", *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT
         )
         current_process = process
         current_task_name = task_name
-        last_status_msg = "Démarrage..."
+        last_status_msg = "Demarrage..."
 
+        from datetime import datetime
         while True:
             line = await process.stdout.readline()
             if not line: break
             
             text = line.decode('utf-8', errors='replace').strip()
             if text:
+                timestamp = datetime.now().strftime("%H:%M:%S")
                 last_status_msg = text
                 add_to_log(text)
-                print(f"[{task_name}] {text}")
+                # Affichage console enrichi
+                print(f"[{timestamp}] [{task_name.upper()}] {text}")
 
         return_code = await process.wait()
         
@@ -292,10 +296,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         async def run_backtest_flow():
             global current_process, current_task_name, last_status_msg
             try:
+                from datetime import datetime
                 current_task_name = "Backtest (Data)"
                 last_status_msg = "Recuperation data..."
-                p1 = await asyncio.create_subprocess_exec("python", "PY_FILES/Get_Backtest_Data.py")
+                p1 = await asyncio.create_subprocess_exec(
+                    "python", "-u", "PY_FILES/Get_Backtest_Data.py",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT
+                )
                 current_process = p1
+                while True:
+                    line = await p1.stdout.readline()
+                    if not line: break
+                    text = line.decode('utf-8', errors='replace').strip()
+                    if text:
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        print(f"[{timestamp}] [BACKTEST-DATA] {text}")
+                        last_status_msg = text
                 await p1.wait()
                 
                 if p1.returncode != 0:
@@ -303,14 +320,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
 
                 current_task_name = "Backtest (Run)"
-                last_status_msg = "Analyse des stratégies..."
-                p2 = await asyncio.create_subprocess_exec("python", "PY_FILES/ALL_BACKTEST.py", stdout=asyncio.subprocess.PIPE)
+                last_status_msg = "Analyse des strategies..."
+                p2 = await asyncio.create_subprocess_exec(
+                    "python", "-u", "PY_FILES/ALL_BACKTEST.py",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT
+                )
                 current_process = p2
                 while True:
                     line = await p2.stdout.readline()
                     if not line: break
                     text = line.decode('utf-8', errors='replace').strip()
-                    if text: last_status_msg = text
+                    if text:
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        print(f"[{timestamp}] [BACKTEST-RUN] {text}")
+                        last_status_msg = text
 
                 return_code = await p2.wait()
                 if return_code == 0:

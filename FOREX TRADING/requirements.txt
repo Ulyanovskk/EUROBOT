@@ -1,8 +1,0 @@
-numpy
-pandas
-scikit-learn
-lightgbm
-catboost
-joblib
-ta
-MetaTrader5

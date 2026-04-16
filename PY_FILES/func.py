@@ -3,7 +3,6 @@ import ta
 import os
 import sys
 import io
-import atexit
 import joblib
 import requests
 import numpy as np
@@ -20,7 +19,6 @@ if sys.stdout.encoding != 'utf-8':
 
 
 SYMBOL = "EURUSDm"
-_CANDLE = '5M'
 
 # CONFIGURATION TELEGRAM (Pour les notifications push)
 TELEGRAM_TOKEN = "8725970972:AAHKf4iYfAnVGio0Sy2LUjQ_HA1hOI2K_g4"
@@ -34,20 +32,6 @@ def send_telegram_message(message):
     except Exception as e:
         print(f"Erreur Telegram Send: {e}")
 
-def info_init():
-    try:
-        url = "https://trying-20541-default-rtdb.firebaseio.com/Main_info.json"
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
-        data = response.json()['main_init']
-        # Utiliser encode/decode pour éviter les crashs d'encodage selon le terminal
-        try:
-            print(str(data).encode('ascii', 'ignore').decode('ascii'))
-        except:
-            pass
-    except Exception as e:
-        print(f"Info_init warning (non-fatal): {str(e)}")
-info_init()
 
 def apply_features(df):
     df = df.copy()
@@ -451,5 +435,4 @@ def check_account_info(mt5):
 
 
 
-
-atexit.register(info_init)
+
