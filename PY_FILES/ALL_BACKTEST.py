@@ -15,7 +15,7 @@ full_data = pd.read_csv(f"CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv")
 test_size = int(len(full_data) * 0.40)
 backtest_data = full_data.tail(test_size).copy()
 
-print(f"📊 Backtest sur {len(backtest_data)} bougies (40% du dataset - Données INCONNUES)...")
+print(f"Backtest sur {len(backtest_data)} bougies (40% du dataset - Donnees INCONNUES)...")
 
 backtest_df = apply_features(backtest_data)
 backtest_df = create_targets(backtest_df)
@@ -24,7 +24,7 @@ backtest_df.dropna(inplace=True)
 all_target = ['T_5M', 'T_10M', 'T_15M', 'T_20M', 'T_30M']
 main_res = []
 
-print(f"🕵️ Début du Backtest multi-timeframe pour {SYMBOL}...")
+print(f"Debut du Backtest multi-timeframe pour {SYMBOL}...")
 
 for target in all_target:
     bundle = joblib.load(f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
@@ -33,13 +33,13 @@ for target in all_target:
 
     results = trade_backtest(df=backtest_df, model=model, feature_cols=feature_columns, threshold=55)
     
-    print(f"\n📈 Analyse pour {target}:")
+    print(f"\nAnalyse pour {target}:")
     analysis = analyze_results(results)
     main_res.append(analysis)
     
     # Envoi Notification Telegram
     msg = (
-        f"📊 *BACKTEST {target} TERMINÉ*\n"
+        f"*BACKTEST {target} TERMINE*\n"
         f"Symbol: {SYMBOL}\n"
         f"Win Rate: `{analysis['win_rate']}%` \n"
         f"Profit total: `{analysis['total_profit_pips']} pips` \n"
@@ -47,4 +47,4 @@ for target in all_target:
     )
     send_telegram_message(msg)
 
-print("\n✨ Tous les backtests sont terminés. Résultats envoyés sur Telegram.")
+print("\nTous les backtests sont terminés. Résultats envoyés sur Telegram.")

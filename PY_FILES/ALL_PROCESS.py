@@ -20,7 +20,7 @@ full_data = pd.read_csv(f'CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv')
 train_size = int(len(full_data) * 0.60)
 data = full_data.head(train_size).copy()
 
-print(f"🧠 Entraînement sur {len(data)} bougies (60% du dataset)...")
+print(f"Entrainement sur {len(data)} bougies (60% du dataset)...")
 
 df = apply_features(data)
 df = create_targets(df)
@@ -32,7 +32,7 @@ X_train = train_df.drop(columns=all_target)
 
 # 2. Boucle d'entraînement pour chaque Timeframe
 for target in all_target:
-    print(f'🚀 Entraînement CatBoost pour la cible : {target}...')
+    print(f"Entraînement CatBoost pour la cible : {target}...")
     y_train = train_df[target]
     
     # Premier passage pour identifier les meilleures features
@@ -51,7 +51,7 @@ for target in all_target:
     # On garde les 76 meilleures features
     top_76_indx = sort_indx[:76]
     top76_features = [feature_names[i] for i in top_76_indx]
-    print(f'✅ TOP 76 FEATURES sélectionnées pour {target}.')
+    print(f"TOP 76 FEATURES selectionnees pour {target}.")
 
     # Réentraînement final avec les meilleures features uniquement
     X_train_top76 = X_train[top76_features]
@@ -67,7 +67,7 @@ for target in all_target:
     # Sauvegarde du modèle (bundle)
     # Note: On garde le nom "lgbm" dans le fichier pour ne pas avoir à modifier les autres scripts
     joblib.dump({"model": model_top76, "features": top76_features}, f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
-    print(f'💾 Modèle enregistré : ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl')
+    print(f"Modele enregistre : ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
     print('-------------------------------------')
 
-print("✨ Entraînement de tous les modèles terminé avec succès (Moteur: CatBoost).")
+print("Entrainement de tous les modeles termine avec succes (Moteur: CatBoost).")

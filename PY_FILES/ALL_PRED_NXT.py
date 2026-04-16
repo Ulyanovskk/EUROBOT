@@ -14,10 +14,10 @@ if sys.stdout.encoding != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 if not mt5.initialize():
-    print("❌ MT5 initialization failed")
+    print("ERREUR: MT5 initialization failed")
     quit()
 
-print(f"🚀 Bot started for {SYMBOL}...")
+print(f"Bot started for {SYMBOL}...")
 
 # Paramètres du Circuit Breaker (Ajustés pour capital 50$)
 DAILY_LOSS_LIMIT_PCT = 20.0  # Seuil augmenté pour supporter les lots minimum de 0.01
@@ -30,7 +30,7 @@ try:
         # Vérification du changement de jour pour le Circuit Breaker
         now_dt = datetime.now()
         if now_dt.date() > current_day:
-            print(f"🌞 Nouveau jour détecté ({now_dt.date()}). Réinitialisation du capital de référence.")
+            print(f"Nouveau jour detecte ({now_dt.date()}). Reinitialisation du capital de reference.")
             current_day = now_dt.date()
             starting_daily_balance = mt5.account_info().balance
 
@@ -40,8 +40,8 @@ try:
         current_drawdown_pct = ((starting_daily_balance - equity) / starting_daily_balance) * 100
 
         if current_drawdown_pct >= DAILY_LOSS_LIMIT_PCT:
-            print(f"🛑 CIRCUIT BREAKER ACTIF : Perte de {round(current_drawdown_pct, 2)}% atteinte.")
-            print(f"ℹ️ Trading suspendu jusqu'à demain. (Start Balance: {starting_daily_balance}, Equity: {equity})")
+            print(f"CIRCUIT BREAKER ACTIF : Perte de {round(current_drawdown_pct, 2)}% atteinte.")
+            print(f"Information: Trading suspendu jusqu'a demain. (Start Balance: {starting_daily_balance}, Equity: {equity})")
             time.sleep(60)
             continue
 
@@ -51,7 +51,7 @@ try:
         rates = mt5.copy_rates_from_pos(SYMBOL, TIMEFRAME, 1, N_BARS)
 
         if rates is None or len(rates) < N_BARS:
-            print("❌ Failed to fetch enough closed candles. Retrying in 10s...")
+            print("ERREUR: Failed to fetch enough closed candles. Retrying in 10s...")
             time.sleep(10)
             continue
 
@@ -84,7 +84,7 @@ try:
         up_moves_mean = round(sum(up_moves.values())/len(up_moves), 2) 
         down_moves_mean = round(sum(down_moves.values())/len(down_moves), 2)
         
-        print(f"\n🔍 Confiance: UP {up_moves_mean}% | DOWN {down_moves_mean}%")
+        print(f"\nInformation: Confiance: UP {up_moves_mean}% | DOWN {down_moves_mean}%")
 
         # --- SURVEILLANCE DES FERMETURES ---
         current_positions = mt5.positions_get(symbol=SYMBOL)
@@ -93,18 +93,18 @@ try:
         # Si on avait une position et qu'on ne l'a plus
         for old_ticket in last_known_positions:
             if old_ticket not in current_ticket_ids:
-                # La position a été fermée ! On récupère le résultat
+                # La position a été fermee ! On récupère le résultat
                 from datetime import datetime, timedelta
                 history = mt5.history_deals_get(datetime.now() - timedelta(minutes=5), datetime.now())
                 if history:
                     for deal in history:
                         if deal.position_id == old_ticket and deal.entry == mt5.DEAL_ENTRY_OUT:
                             profit = deal.profit + deal.commission + deal.swap
-                            emoji = "💰" if profit > 0 else "📉"
-                            msg = (f"{emoji} *TRADE FERMÉ - {SYMBOL}*\n\n"
+                            status_text = "PROFIT" if profit > 0 else "LOSS"
+                            msg = (f"--- TRADE FERME - {status_text} - {SYMBOL} ---\n\n"
                                    f"Ticket : `{old_ticket}`\n"
-                                   f"Résultat : *{round(profit, 2)} €*\n"
-                                   f"Balance : `{mt5.account_info().balance} €`")
+                                   f"Resultat : *{round(profit, 2)} EUR*\n"
+                                   f"Balance : `{mt5.account_info().balance} EUR`")
                             from func import send_telegram_message
                             send_telegram_message(msg)
         
@@ -114,11 +114,11 @@ try:
         has_position = len(current_positions) > 0
 
         if has_position:
-            print(f"ℹ️ Position déjà ouverte sur {SYMBOL}. En attente...")
+            print(f"Information: Position deja ouverte sur {SYMBOL}. En attente...")
         else:
             THRESHOLD = 55
             if up_moves_mean >= THRESHOLD and up_moves_mean > down_moves_mean:
-                print("🟢 Signal BUY détecté!")
+                print("Signal BUY detecte!")
                 # Calcul des paramètres (prix, SL, TP, lot)
                 tick = mt5.symbol_info_tick(SYMBOL)
                 pip_info = get_pip_info(mt5, SYMBOL)
@@ -139,7 +139,7 @@ try:
                 log_trade(SYMBOL, "BUY", entry_buy, SL_buy, TP_buy, lot_size, up_moves_mean, down_moves_mean, result)
 
             elif down_moves_mean >= THRESHOLD and down_moves_mean > up_moves_mean:
-                print("🔴 Signal SELL détecté!")
+                print("Signal SELL detecte!")
                 tick = mt5.symbol_info_tick(SYMBOL)
                 pip_info = get_pip_info(mt5, SYMBOL)
                 row = df.iloc[-1]
@@ -158,12 +158,12 @@ try:
                 result = place_sell(mt5, SYMBOL, lot_size, entry_sell, SL_sell, TP_sell)
                 log_trade(SYMBOL, "SELL", entry_sell, SL_sell, TP_sell, lot_size, up_moves_mean, down_moves_mean, result)
 
-        print("😴 Sleeping for 10 seconds...")
+        print("Sleeping for 10 seconds...")
         time.sleep(10)
 
 except KeyboardInterrupt:
-    print("\n👋 Bot stopped by user.")
+    print("\nBot stopped by user.")
 except Exception as e:
-    print(f"\n❌ Massive Error: {e}")
+    print(f"\nERREUR: Massive Error: {e}")
 finally:
     mt5.shutdown()

@@ -60,28 +60,28 @@ async def run_process_task(command, task_name, context: ContextTypes.DEFAULT_TYP
         return_code = await process.wait()
         
         if current_process is not None:
-            status_emoji = "✅" if return_code == 0 else "⚠️"
-            msg = f"{status_emoji} Tâche '{task_name}' terminée."
+            status_text = "SUCCESS" if return_code == 0 else "WARNING"
+            msg = f"[{status_text}] Tâche '{task_name}' terminée."
             await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=msg)
             add_to_log(f"--- Fin de {task_name} (Code: {return_code}) ---")
             
     except Exception as e:
-        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"❌ Erreur Task: {str(e)}")
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"[ERREUR] Task: {str(e)}")
     finally:
         current_process = None
         current_task_name = ""
-        last_status_msg = "Prêt."
+        last_status_msg = "Pret."
 
 async def get_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande /log pour voir les derniers messages"""
     if update.effective_user.id != ADMIN_CHAT_ID: return
     
     if not log_buffer:
-        await update.message.reply_text("📋 Aucun log en mémoire.")
+        await update.message.reply_text("Aucun log en mémoire.")
         return
         
     log_text = "\n".join(log_buffer)
-    await update.message.reply_text(f"📋 **DERNIERS LOGS :**\n\n```\n{log_text}\n```", parse_mode='Markdown')
+    await update.message.reply_text(f"--- DERNIERS LOGS ---\n\n```\n{log_text}\n```", parse_mode='Markdown')
 
 async def get_positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Affiche les positions ouvertes"""
@@ -91,16 +91,16 @@ async def get_positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     positions = mt5.positions_get(symbol=SYMBOL)
     if not positions:
-        await update.message.reply_text(f"ℹ️ Aucune position ouverte sur {SYMBOL}.")
+        await update.message.reply_text(f"Information: Aucune position ouverte sur {SYMBOL}.")
     else:
-        msg = "🎯 **POSITIONS ACTIVES :**\n\n"
+        msg = "--- POSITIONS ACTIVES ---\n\n"
         for p in positions:
-            p_type = "🟢 BUY" if p.type == mt5.ORDER_TYPE_BUY else "🔴 SELL"
+            p_type = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
             msg += (f"{p_type} | Lot: `{p.volume}`\n"
                     f"Prix : `{p.price_open}` → `{p.price_current}`\n"
-                    f"Profit : `{round(p.profit, 2)} €`\n"
+                    f"Profit : `{round(p.profit, 2)} EUR`\n"
                     f"SL: `{p.sl}` | TP: `{p.tp}`\n"
-                    f"───────────────\n")
+                    f"---------------\n")
         await update.message.reply_text(msg, parse_mode='Markdown')
     mt5.shutdown()
 
@@ -122,14 +122,14 @@ async def get_risk_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     drawdown_pct = ((initial_balance - account.equity) / initial_balance) * 100
     
-    status = "✅ OK" if drawdown_pct < 10 else "⚠️ PRUDENCE" if drawdown_pct < 20 else "🛑 STOPPED"
+    status = "OK" if drawdown_pct < 10 else "PRUDENCE" if drawdown_pct < 20 else "STOPPED"
     
-    msg = (f"🛡️ **GESTION DU RISQUE :**\n\n"
+    msg = (f"--- GESTION DU RISQUE ---\n\n"
            f"Statut : {status}\n"
-           f"Capital initial jour : `{round(initial_balance, 2)} €`\n"
-           f"Équité actuelle : `{round(account.equity, 2)} €`\n"
+           f"Capital initial jour : `{round(initial_balance, 2)} EUR`\n"
+           f"Equite actuelle : `{round(account.equity, 2)} EUR`\n"
            f"Drawdown jour : `{round(drawdown_pct, 2)} %` / 20%\n\n"
-           f"🎯 Marge libre : `{round(account.margin_free, 2)} €`")
+           f"Marge libre : `{round(account.margin_free, 2)} EUR`")
     
     await update.message.reply_text(msg, parse_mode='Markdown')
     mt5.shutdown()
@@ -143,38 +143,38 @@ async def get_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     deals = mt5.history_deals_get(today_start, datetime.now())
     
     if not deals:
-        await update.message.reply_text("📋 Aucun trade clôturé aujourd'hui.")
+        await update.message.reply_text("Rapport: Aucun trade cloture aujourd'hui.")
     else:
         wins = [d for d in deals if d.profit > 0 and d.entry == mt5.DEAL_ENTRY_OUT]
         losses = [d for d in deals if d.profit <= 0 and d.entry == mt5.DEAL_ENTRY_OUT]
         total_p = sum(d.profit + d.commission + d.swap for d in deals if d.entry == mt5.DEAL_ENTRY_OUT)
         
-        msg = (f"📊 **RAPPORT JOURNALIER :**\n\n"
+        msg = (f"--- RAPPORT JOURNALIER ---\n\n"
                f"Trades clos : `{len(wins) + len(losses)}`\n"
-               f"Gagnés : `{len(wins)}` | Perdus : `{len(losses)}` \n"
-               f"Profit/Perte Net : `{round(total_p, 2)} €` \n\n"
-               f"💰 Solde : `{mt5.account_info().balance} €`")
+               f"Gagnes : `{len(wins)}` | Perdus : `{len(losses)}` \n"
+               f"Profit/Perte Net : `{round(total_p, 2)} EUR` \n\n"
+               f"Solde : `{mt5.account_info().balance} EUR`")
         await update.message.reply_text(msg, parse_mode='Markdown')
     mt5.shutdown()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Menu principal avec boutons"""
     if update.effective_user.id != ADMIN_CHAT_ID:
-        await update.message.reply_text("🚫 Accès refusé.")
+        await update.message.reply_text("🚫 Acces refuse.")
         return
 
-    status_icon = "🟢" if current_process else "⚪"
-    status_text = f"{status_icon} En cours : {current_task_name}" if current_process else "⚪ Prêt"
+    status_text_icon = "[RUNNING]" if current_process else "[WAITING]"
+    status_text = f"{status_text_icon} En cours : {current_task_name}" if current_process else "[READY] Pret"
     
     keyboard = [
-        [InlineKeyboardButton("🚀 Lancer Trading Live", callback_data='live')],
-        [InlineKeyboardButton("🧠 Entraîner / 📊 Backtest", callback_data='menu_train')],
-        [InlineKeyboardButton("🔍 Avancement & 📋 Logs", callback_data='menu_logs')],
-        [InlineKeyboardButton("💰 Compte & 📊 Report", callback_data='menu_account')],
-        [InlineKeyboardButton("🛑 STOP TOUT", callback_data='stop')]
+        [InlineKeyboardButton("Lancer Trading Live", callback_data='live')],
+        [InlineKeyboardButton("Entraîner / Backtest", callback_data='menu_train')],
+        [InlineKeyboardButton("Avancement & Logs", callback_data='menu_logs')],
+        [InlineKeyboardButton("Compte & Report", callback_data='menu_account')],
+        [InlineKeyboardButton("STOP TOUT", callback_data='stop')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(f'🤖 EUROBOT - Tour de Contrôle\nStatut : {status_text}\n\nActions disponibles :', reply_markup=reply_markup)
+    await update.message.reply_text(f'EUROBOT - Tour de Controle\nStatut : {status_text}\n\nActions disponibles :', reply_markup=reply_markup)
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gère les clics sur les boutons et les sous-menus"""
@@ -188,31 +188,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- SOUS-MENUS ---
     if action == 'menu_train':
         keyboard = [
-            [InlineKeyboardButton("🧠 Entraîner les Modèles", callback_data='train')],
-            [InlineKeyboardButton("📊 Lancer Backtest 90j", callback_data='backtest')],
-            [InlineKeyboardButton("⬅️ Retour", callback_data='main_menu')]
+            [InlineKeyboardButton("Entrainer les Modeles", callback_data='train')],
+            [InlineKeyboardButton("Lancer Backtest 100j", callback_data='backtest')],
+            [InlineKeyboardButton("Retour", callback_data='main_menu')]
         ]
-        await query.edit_message_text("🛠️ **MODÈLES & ANALYSE**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text("--- MODELES & ANALYSE ---", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
 
     if action == 'menu_logs':
         keyboard = [
-            [InlineKeyboardButton("🔍 Voir l'avancement", callback_data='progress')],
-            [InlineKeyboardButton("📋 Derniers Logs", callback_data='show_logs')],
-            [InlineKeyboardButton("⬅️ Retour", callback_data='main_menu')]
+            [InlineKeyboardButton("Voir l'avancement", callback_data='progress')],
+            [InlineKeyboardButton("Derniers Logs", callback_data='show_logs')],
+            [InlineKeyboardButton("Retour", callback_data='main_menu')]
         ]
-        await query.edit_message_text("📝 **SUIVI GÉNÉRAL**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text("--- SUIVI GENERAL ---", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
 
     if action == 'menu_account':
         keyboard = [
-            [InlineKeyboardButton("💰 Mon Solde", callback_data='status')],
-            [InlineKeyboardButton("🎯 Mes Positions", callback_data='positions')],
-            [InlineKeyboardButton("🛡️ État du Risque", callback_data='risk')],
-            [InlineKeyboardButton("📊 Rapport Journalier", callback_data='report')],
-            [InlineKeyboardButton("⬅️ Retour", callback_data='main_menu')]
+            [InlineKeyboardButton("Mon Solde", callback_data='status')],
+            [InlineKeyboardButton("Mes Positions", callback_data='positions')],
+            [InlineKeyboardButton("État du Risque", callback_data='risk')],
+            [InlineKeyboardButton("Rapport Journalier", callback_data='report')],
+            [InlineKeyboardButton("Retour", callback_data='main_menu')]
         ]
-        await query.edit_message_text("💰 **COMPTE & PERFORMANCE**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text("--- COMPTE & PERFORMANCE ---", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
 
     if action == 'main_menu':
@@ -235,31 +235,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             current_process = None
             current_task_name = ""
-            last_status_msg = "Arrêté par l'utilisateur."
-            add_to_log("🛑 ARRÊT GLOBAL DÉTECTÉ")
+            last_status_msg = "Arrete par l'utilisateur."
+            add_to_log("🛑 Arret GLOBAL DETECTE")
             
             # On s'assure que MT5 est coupé si le bot était en live
             try: mt5.shutdown()
             except: pass
             
-            await query.edit_message_text(f"🛑 Processus '{task_name}' arrêté. Le bot est à nouveau disponible.")
+            await query.edit_message_text(f"STOP: Processus '{task_name}' arrêté. Le bot est à nouveau disponible.")
         else:
-            await query.edit_message_text("ℹ️ Aucun processus n'est en cours.")
+            await query.edit_message_text("INFO: Aucun processus n'est en cours.")
         return
 
     if action == 'progress':
         if current_process:
-            await query.message.reply_text(f"📊 **AVANCEMENT : {current_task_name}**\n\n🕒 Dernier log :\n`{last_status_msg}`", parse_mode='Markdown')
+            await query.message.reply_text(f"AVANCEMENT : {current_task_name}\n\nDernier log :\n`{last_status_msg}`", parse_mode='Markdown')
         else:
-            await query.message.reply_text("⚪ Aucun processus actif.")
+            await query.message.reply_text("Aucun processus actif.")
         return
 
     if action == 'show_logs':
         if not log_buffer:
-            await query.message.reply_text("📋 Aucun log en mémoire.")
+            await query.message.reply_text("Aucun log en mémoire.")
         else:
             log_text = "\n".join(log_buffer)
-            await query.message.reply_text(f"📋 **DERNIERS LOGS :**\n\n```\n{log_text}\n```", parse_mode='Markdown')
+            await query.message.reply_text(f"--- DERNIERS LOGS ---\n\n```\n{log_text}\n```", parse_mode='Markdown')
         return
 
     if action == 'positions':
@@ -284,22 +284,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         asyncio.create_task(run_process_task(["PY_FILES/ALL_PRED_NXT.py"], "Trading Live", context))
         
     elif action == 'train':
-        await query.edit_message_text("🧠 Lancement de l'ENTRAÎNEMENT...")
-        asyncio.create_task(run_process_task(["PY_FILES/ALL_PROCESS.py"], "Entraînement Modèles", context))
+        await query.edit_message_text("🧠 Lancement de l'ENTRAINEMENT...")
+        asyncio.create_task(run_process_task(["PY_FILES/ALL_PROCESS.py"], "Entrainement Modeles", context))
 
     elif action == 'backtest':
-        await query.edit_message_text("📊 Préparation du Backtest...")
+        await query.edit_message_text("📊 Preparation du Backtest...")
         async def run_backtest_flow():
             global current_process, current_task_name, last_status_msg
             try:
                 current_task_name = "Backtest (Data)"
-                last_status_msg = "Récupération data..."
+                last_status_msg = "Recuperation data..."
                 p1 = await asyncio.create_subprocess_exec("python", "PY_FILES/Get_Backtest_Data.py")
                 current_process = p1
                 await p1.wait()
                 
                 if p1.returncode != 0:
-                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text="❌ Échec Data.")
+                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text="ECHEC Data.")
                     return
 
                 current_task_name = "Backtest (Run)"
@@ -314,15 +314,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 return_code = await p2.wait()
                 if return_code == 0:
-                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"✅ Backtest terminé avec succès.")
+                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"Backtest termine avec succes.")
                 else:
-                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"❌ Le backtest a échoué (Code: {return_code}). Vérifiez les logs.")
+                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"Le backtest a échoué (Code: {return_code}). Vérifiez les logs.")
             except Exception as e:
                 await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"❌ Erreur: {str(e)}")
             finally:
                 current_process = None
                 current_task_name = ""
-                last_status_msg = "Prêt."
+                last_status_msg = "Pret."
         asyncio.create_task(run_backtest_flow())
 
     elif action == 'status':
@@ -331,9 +331,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         account = mt5.account_info()
         status_msg = (
-            f"💰 --- ÉTAT DU COMPTE ---\n"
+            f"--- ETAT DU COMPTE ---\n"
             f"Solde : {account.balance} {account.currency}\n"
-            f"Équité : {account.equity} {account.currency}\n"
+            f"Equite : {account.equity} {account.currency}\n"
             f"Marge Libre : {account.margin_free} {account.currency}\n"
             f"Levier : 1:{account.leverage}"
         )

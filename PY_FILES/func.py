@@ -32,7 +32,7 @@ def send_telegram_message(message):
         payload = {"chat_id": ADMIN_CHAT_ID, "text": message, "parse_mode": "Markdown"}
         requests.post(url, json=payload, timeout=5)
     except Exception as e:
-        print(f"⚠️ Erreur Telegram Send: {e}")
+        print(f"Erreur Telegram Send: {e}")
 
 def info_init():
     try:
@@ -163,18 +163,18 @@ def calc_lot_size(balance, risk_percent, sl_pips,pip_value_per_lot, min_lot, max
 
 def check_trade_result(mt5, result):
     if result is None:
-        print("❌ Order failed: result is None")
+        print("ERREUR: Order failed: result is None")
         print("MT5 last error:", mt5.last_error())
         return False
 
     if result.retcode != mt5.TRADE_RETCODE_DONE:
-        print("❌ Order rejected")
+        print("ERREUR: Order rejected")
         print("Retcode:", result.retcode)
         print("Comment:", result.comment)
         print("Request ID:", result.request_id)
         return False
 
-    print("✅ Trade placed successfully")
+    print("OK: Trade placed successfully")
     print("Order Ticket:", result.order)
     print("Deal Ticket:", result.deal)
     print("Volume:", result.volume)
@@ -424,17 +424,17 @@ def log_trade(symbol, direction, entry_price, SL, TP, lot_size, proba_up, proba_
         df_log = pd.DataFrame([log_entry])
 
     df_log.to_csv(LOG_FILE, index=False)
-    print("✅ Trade logged successfully")
+    print("Trade logged successfully")
 
     # ENVOI NOTIFICATION TELEGRAM
-    status_emoji = "🔵" if "DONE" in str(order_result) else "❌"
+    status_text = "DONE" if "DONE" in str(order_result) else "FAILED"
     msg = (
-        f"{status_emoji} *NOUVEAU TRADE - {symbol}*\n\n"
-        f"方向 : *{direction}*\n"
+        f"[{status_text}] NOUVEAU TRADE - {symbol}\n\n"
+        f"Direction : *{direction}*\n"
         f"Prix : `{entry_price}`\n"
         f"Lot : `{lot_size}`\n"
         f"SL : `{round(SL, 5)}` | TP : `{round(TP, 5)}`\n\n"
-        f"🎯 Confiance : UP {proba_up}% | DN {proba_down}%"
+        f"Confiance : UP {proba_up}% | DN {proba_down}%"
     )
     send_telegram_message(msg)
 
