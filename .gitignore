@@ -8,7 +8,7 @@ venv/
 .env
 
 # Modèles volumineux (facultatif si petits)
-# ALL_MODELS/*.pkl
+ALL_MODELS/*.pkl
 
 # DONNÉES (On ignore les gros fichiers de données brutes)
 CSV_FILES/MT5_*_Exchange_Rate_Dataset.csv
