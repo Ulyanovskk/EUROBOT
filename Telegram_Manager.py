@@ -191,11 +191,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- SOUS-MENUS ---
     if action == 'menu_train':
         keyboard = [
-            [InlineKeyboardButton("Entrainer les Modeles", callback_data='train')],
-            [InlineKeyboardButton("Lancer Backtest 100j", callback_data='backtest')],
+            [InlineKeyboardButton("1. Recuperer Donnees", callback_data='get_data')],
+            [InlineKeyboardButton("2. Entrainer les Modeles", callback_data='train')],
+            [InlineKeyboardButton("3. Lancer Backtest", callback_data='backtest')],
             [InlineKeyboardButton("Retour", callback_data='main_menu')]
         ]
-        await query.edit_message_text("--- MODELES & ANALYSE ---", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text("--- WORKFLOW IA (Ordre 1-2-3) ---", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
 
     if action == 'menu_logs':
@@ -278,7 +279,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # --- LANCEMENT DE PROCESSUS ---
-    if current_process and action in ['live', 'train', 'backtest']:
+    if current_process and action in ['live', 'train', 'backtest', 'get_data']:
         await query.edit_message_text(f"Attention: Un processus ('{current_task_name}') est deja en cours.")
         return
 
@@ -290,63 +291,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Lancement de l'ENTRAINEMENT...")
         asyncio.create_task(run_process_task(["PY_FILES/ALL_PROCESS.py"], "Entrainement Modeles", context))
 
+    elif action == 'get_data':
+        await query.edit_message_text("Recuperation des donnees historiques...")
+        asyncio.create_task(run_process_task(["PY_FILES/Get_Backtest_Data.py"], "Recuperation Data", context))
+
     elif action == 'backtest':
-        await query.edit_message_text("Preparation du Backtest...")
-        async def run_backtest_flow():
-            global current_process, current_task_name, last_status_msg
-            try:
-                from datetime import datetime
-                current_task_name = "Backtest (Data)"
-                last_status_msg = "Recuperation data..."
-                p1 = await asyncio.create_subprocess_exec(
-                    "python", "-u", "PY_FILES/Get_Backtest_Data.py",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT
-                )
-                current_process = p1
-                while True:
-                    line = await p1.stdout.readline()
-                    if not line: break
-                    text = line.decode('utf-8', errors='replace').strip()
-                    if text:
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        print(f"[{timestamp}] [BACKTEST-DATA] {text}")
-                        last_status_msg = text
-                await p1.wait()
-                
-                if p1.returncode != 0:
-                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text="ECHEC Data.")
-                    return
-
-                current_task_name = "Backtest (Run)"
-                last_status_msg = "Analyse des strategies..."
-                p2 = await asyncio.create_subprocess_exec(
-                    "python", "-u", "PY_FILES/ALL_BACKTEST.py",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT
-                )
-                current_process = p2
-                while True:
-                    line = await p2.stdout.readline()
-                    if not line: break
-                    text = line.decode('utf-8', errors='replace').strip()
-                    if text:
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        print(f"[{timestamp}] [BACKTEST-RUN] {text}")
-                        last_status_msg = text
-
-                return_code = await p2.wait()
-                if return_code == 0:
-                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"Backtest termine avec succes.")
-                else:
-                    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"Le backtest a échoué (Code: {return_code}). Vérifiez les logs.")
-            except Exception as e:
-                await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"Erreur: {str(e)}")
-            finally:
-                current_process = None
-                current_task_name = ""
-                last_status_msg = "Pret."
-        asyncio.create_task(run_backtest_flow())
+        await query.edit_message_text("Lancement de l'Analyse Backtest...")
+        asyncio.create_task(run_process_task(["PY_FILES/ALL_BACKTEST.py"], "Backtest Analyse", context))
 
     elif action == 'status':
         if not mt5.initialize():
