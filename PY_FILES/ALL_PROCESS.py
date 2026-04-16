@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import sys
 import io
+import os
 from catboost import CatBoostClassifier
 from func import apply_features, create_targets, SYMBOL
 
@@ -12,6 +13,7 @@ if sys.stdout.encoding != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # 1. Chargement des données
+os.makedirs("ALL_MODELS", exist_ok=True)
 data = pd.read_csv(f'CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv') 
 df = apply_features(data)
 df = create_targets(df)
@@ -53,6 +55,7 @@ for target in all_target:
         allow_writing_files=False
     )
     model_top76.fit(X_train_top76, y_train)
+
 
     # Sauvegarde du modèle (bundle)
     # Note: On garde le nom "lgbm" dans le fichier pour ne pas avoir à modifier les autres scripts

@@ -16,6 +16,7 @@ def get_90_days_data():
         return
 
     # Calcul des dates (90 derniers jours)
+    os.makedirs("CSV_FILES", exist_ok=True)
     end_date = datetime.now()
     start_date = end_date - timedelta(days=90)
 
