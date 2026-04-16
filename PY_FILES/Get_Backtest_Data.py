@@ -12,7 +12,7 @@ if sys.stdout.encoding != 'utf-8':
 
 def get_90_days_data():
     if not mt5.initialize():
-        print("❌ MT5 initialization failed")
+        print("MT5 initialization failed")
         return
 
     # Calcul des dates (365 derniers jours)
@@ -25,13 +25,20 @@ def get_90_days_data():
 
     # S'assurer que le symbole est présent dans le MarketWatch
     if not mt5.symbol_select(SYMBOL, True):
-        print(f"❌ Failed to select {SYMBOL}")
+        print(f"Failed to select {SYMBOL}")
         return
 
-    # Récupération des données en 5 minutes (On demande 100 000 bougies pour couvrir ~1 an)
+    # Récupération adaptative (On essaie le max, sinon on réduit)
     timeframe = mt5.TIMEFRAME_M5
-    print(f"Requesting last 100,000 candles (approx 1 year)...")
-    rates = mt5.copy_rates_from(SYMBOL, timeframe, datetime.now(), 100000)
+    attempts = [100000, 75000, 50000, 25000, 10000]
+    rates = None
+    
+    for count in attempts:
+        print(f"Attempting to download {count} candles...")
+        rates = mt5.copy_rates_from(SYMBOL, timeframe, datetime.now(), count)
+        if rates is not None and len(rates) > (count * 0.9): # On accepte si on a au moins 90%
+            break
+        print(f"Failed or insufficient data for {count} candles.")
 
     if rates is not None and len(rates) > 0:
         df = pd.DataFrame(rates)
@@ -57,9 +64,9 @@ def get_90_days_data():
         drop_duplicate(file_path)
         
         print(f"Success! {len(df)} candles saved to {file_path}")
-        print(f"Data starts from: {df['Date'].min()}")
+        print(f"Data goes from {df['Date'].min()} to {df['Date'].max()}")
     else:
-        print("Error: Could not retrieve candles. Try opening the EURUSDm chart in MT5 and scroll back to force history download.")
+        print("Final Error: No data could be retrieved. Please check if EURUSDm is active and history is available in MT5.")
 
     mt5.shutdown()
 

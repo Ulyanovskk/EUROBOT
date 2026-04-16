@@ -163,7 +163,7 @@ async def get_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Menu principal avec boutons"""
     if update.effective_user.id != ADMIN_CHAT_ID:
-        await update.message.reply_text("🚫 Acces refuse.")
+        await update.message.reply_text("Acces refuse.")
         return
 
     status_text_icon = "[RUNNING]" if current_process else "[WAITING]"
@@ -239,7 +239,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             current_process = None
             current_task_name = ""
             last_status_msg = "Arrete par l'utilisateur."
-            add_to_log("🛑 Arret GLOBAL DETECTE")
+            add_to_log("Arret GLOBAL DETECTE")
             
             # On s'assure que MT5 est coupé si le bot était en live
             try: mt5.shutdown()
@@ -279,19 +279,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- LANCEMENT DE PROCESSUS ---
     if current_process and action in ['live', 'train', 'backtest']:
-        await query.edit_message_text(f"⚠️ Un processus ('{current_task_name}') est déjà en cours.")
+        await query.edit_message_text(f"Attention: Un processus ('{current_task_name}') est deja en cours.")
         return
 
     if action == 'live':
-        await query.edit_message_text("🚀 Lancement du TRADING LIVE...")
+        await query.edit_message_text("Lancement du TRADING LIVE...")
         asyncio.create_task(run_process_task(["PY_FILES/ALL_PRED_NXT.py"], "Trading Live", context))
         
     elif action == 'train':
-        await query.edit_message_text("🧠 Lancement de l'ENTRAINEMENT...")
+        await query.edit_message_text("Lancement de l'ENTRAINEMENT...")
         asyncio.create_task(run_process_task(["PY_FILES/ALL_PROCESS.py"], "Entrainement Modeles", context))
 
     elif action == 'backtest':
-        await query.edit_message_text("📊 Preparation du Backtest...")
+        await query.edit_message_text("Preparation du Backtest...")
         async def run_backtest_flow():
             global current_process, current_task_name, last_status_msg
             try:
@@ -341,7 +341,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"Le backtest a échoué (Code: {return_code}). Vérifiez les logs.")
             except Exception as e:
-                await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"❌ Erreur: {str(e)}")
+                await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"Erreur: {str(e)}")
             finally:
                 current_process = None
                 current_task_name = ""
@@ -350,7 +350,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif action == 'status':
         if not mt5.initialize():
-            await query.edit_message_text("❌ Erreur MT5.")
+            await query.edit_message_text("Erreur MT5.")
             return
         account = mt5.account_info()
         status_msg = (
@@ -365,7 +365,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Lancement du bot Telegram"""
-    print("🛰️ Telegram Manager en attente de commandes...")
+    print("Telegram Manager en attente de commandes...")
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
