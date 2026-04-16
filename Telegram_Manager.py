@@ -223,11 +223,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == 'stop':
         if current_process:
             task_name = current_task_name
-            try: current_process.terminate()
-            except: pass
+            try:
+                current_process.terminate()
+                # Sur Windows, terminate() est parfois ignoré par les sous-processus Python
+                # On attend une seconde et on kill si c'est toujours là
+                await asyncio.sleep(0.5)
+                if current_process:
+                    current_process.kill()
+            except:
+                pass
+            
             current_process = None
             current_task_name = ""
-            await query.edit_message_text(f"🛑 Processus '{task_name}' arrêté.")
+            last_status_msg = "Arrêté par l'utilisateur."
+            add_to_log("🛑 ARRÊT GLOBAL DÉTECTÉ")
+            
+            # On s'assure que MT5 est coupé si le bot était en live
+            try: mt5.shutdown()
+            except: pass
+            
+            await query.edit_message_text(f"🛑 Processus '{task_name}' arrêté. Le bot est à nouveau disponible.")
         else:
             await query.edit_message_text("ℹ️ Aucun processus n'est en cours.")
         return

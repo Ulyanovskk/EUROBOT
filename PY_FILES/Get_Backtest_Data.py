@@ -15,12 +15,12 @@ def get_90_days_data():
         print("❌ MT5 initialization failed")
         return
 
-    # Calcul des dates (90 derniers jours)
+    # Calcul des dates (100 derniers jours)
     os.makedirs("CSV_FILES", exist_ok=True)
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=90)
+    start_date = end_date - timedelta(days=100)
 
-    print(f"📥 Downloading last 90 days of data for {SYMBOL}...")
+    print(f"📥 Downloading last 100 days of data for {SYMBOL}...")
     print(f"Period: {start_date.date()} to {end_date.date()}")
 
     # S'assurer que le symbole est présent dans le MarketWatch

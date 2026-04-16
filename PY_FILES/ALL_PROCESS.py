@@ -14,7 +14,14 @@ if sys.stdout.encoding != 'utf-8':
 
 # 1. Chargement des données
 os.makedirs("ALL_MODELS", exist_ok=True)
-data = pd.read_csv(f'CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv') 
+full_data = pd.read_csv(f'CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv') 
+
+# Split Train/Test : On n'apprend que sur les 60 premiers % des données
+train_size = int(len(full_data) * 0.60)
+data = full_data.head(train_size).copy()
+
+print(f"🧠 Entraînement sur {len(data)} bougies (60% du dataset)...")
+
 df = apply_features(data)
 df = create_targets(df)
 df.dropna(inplace=True)
