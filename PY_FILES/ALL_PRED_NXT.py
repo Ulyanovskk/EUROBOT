@@ -19,8 +19,8 @@ if not mt5.initialize():
 
 print(f"🚀 Bot started for {SYMBOL}...")
 
-# Paramètres du Circuit Breaker
-DAILY_LOSS_LIMIT_PCT = 3.0  # Seuil de 3%
+# Paramètres du Circuit Breaker (Ajustés pour capital 50$)
+DAILY_LOSS_LIMIT_PCT = 20.0  # Seuil augmenté pour supporter les lots minimum de 0.01
 starting_daily_balance = mt5.account_info().balance
 current_day = datetime.now().date()
 

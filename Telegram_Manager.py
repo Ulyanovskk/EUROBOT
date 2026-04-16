@@ -122,13 +122,13 @@ async def get_risk_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     drawdown_pct = ((initial_balance - account.equity) / initial_balance) * 100
     
-    status = "✅ OK" if drawdown_pct < 2 else "⚠️ PRUDENCE" if drawdown_pct < 3 else "🛑 STOPPED"
+    status = "✅ OK" if drawdown_pct < 10 else "⚠️ PRUDENCE" if drawdown_pct < 20 else "🛑 STOPPED"
     
     msg = (f"🛡️ **GESTION DU RISQUE :**\n\n"
            f"Statut : {status}\n"
            f"Capital initial jour : `{round(initial_balance, 2)} €`\n"
            f"Équité actuelle : `{round(account.equity, 2)} €`\n"
-           f"Drawdown jour : `{round(drawdown_pct, 2)} %` / 3%\n\n"
+           f"Drawdown jour : `{round(drawdown_pct, 2)} %` / 20%\n\n"
            f"🎯 Marge libre : `{round(account.margin_free, 2)} €`")
     
     await update.message.reply_text(msg, parse_mode='Markdown')
