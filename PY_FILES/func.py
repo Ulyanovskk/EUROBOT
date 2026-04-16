@@ -1,12 +1,18 @@
 
 import ta
 import os
+import sys
+import io
 import atexit
 import joblib
 import requests
 import numpy as np
 import pandas as pd
 from datetime import datetime
+
+# Fix for Windows UnicodeEncodeError when printing emojis
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 
 

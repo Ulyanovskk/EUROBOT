@@ -2,7 +2,13 @@ import MetaTrader5 as mt5
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+import sys
+import io
 from func import drop_duplicate, SYMBOL
+
+# Fix for Windows UnicodeEncodeError when printing emojis
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 def get_90_days_data():
     if not mt5.initialize():

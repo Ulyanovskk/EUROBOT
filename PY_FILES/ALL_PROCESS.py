@@ -2,8 +2,14 @@ import ta
 import joblib
 import numpy as np
 import pandas as pd
+import sys
+import io
 from catboost import CatBoostClassifier
 from func import apply_features, create_targets, SYMBOL
+
+# Fix for Windows UnicodeEncodeError when printing emojis
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # 1. Chargement des données
 data = pd.read_csv(f'CSV_FILES/MT5_5M_{SYMBOL}_Exchange_Rate_Dataset.csv') 

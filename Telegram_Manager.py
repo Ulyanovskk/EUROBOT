@@ -1,9 +1,15 @@
 import os
 import subprocess
 import asyncio
+import sys
+import io
 import MetaTrader5 as mt5
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+
+# Fix for Windows UnicodeEncodeError when printing emojis
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 from PY_FILES.func import SYMBOL
 

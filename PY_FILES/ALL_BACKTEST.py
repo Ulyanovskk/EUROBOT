@@ -1,6 +1,12 @@
 import joblib
 import pandas as pd
+import sys
+import io
 from func import apply_features, SYMBOL, create_targets, trade_backtest, analyze_results, send_telegram_message
+
+# Fix for Windows UnicodeEncodeError when printing emojis
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # Chargement des données de backtest
 backtest_data = pd.read_csv(f"CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv")

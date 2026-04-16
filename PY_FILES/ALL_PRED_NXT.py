@@ -3,9 +3,15 @@ import time
 import joblib
 import numpy as np
 import pandas as pd
+import sys
+import io
 import MetaTrader5 as mt5
 from datetime import datetime
 from func import apply_features,calc_lot_size,place_buy,check_account_info,place_sell,create_targets,SYMBOL,normalize_lot,get_symbol_volume_info,get_pip_info,log_trade
+
+# Fix for Windows UnicodeEncodeError when printing emojis
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 if not mt5.initialize():
     print("❌ MT5 initialization failed")
