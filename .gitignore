@@ -1,0 +1,20 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environnements virtuels
+venv/
+.env
+
+# Modèles volumineux (facultatif si petits)
+# ALL_MODELS/*.pkl
+
+# DONNÉES (On ignore les gros fichiers de données brutes)
+CSV_FILES/MT5_*_Exchange_Rate_Dataset.csv
+CSV_FILES/BACKTEST_DATA.csv
+CSV_FILES/dukascopy_*.csv
+
+# ON GARDE les fichiers importants
+!CSV_FILES/Trade_log.csv
+!CSV_FILES/MT5_5M_BT_EURUSD_Dataset.csv
