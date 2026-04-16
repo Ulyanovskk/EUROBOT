@@ -16,11 +16,11 @@ if sys.stdout.encoding != 'utf-8':
 os.makedirs("ALL_MODELS", exist_ok=True)
 full_data = pd.read_csv(f'CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv') 
 
-# Split Train/Test : On n'apprend que sur les 60 premiers % des données
-train_size = int(len(full_data) * 0.60)
+# Split Train/Test : On n'apprend que sur les 80 premiers % des données (1 an)
+train_size = int(len(full_data) * 0.80)
 data = full_data.head(train_size).copy()
 
-print(f"Entrainement sur {len(data)} bougies (60% du dataset)...")
+print(f"Entrainement sur {len(data)} bougies (80% du dataset)...")
 
 df = apply_features(data)
 df = create_targets(df)
@@ -37,7 +37,9 @@ for target in all_target:
     
     # Premier passage pour identifier les meilleures features
     model = CatBoostClassifier(
-        iterations=200,
+        iterations=300,
+        depth=6,
+        l2_leaf_reg=10,
         random_seed=42,
         logging_level='Silent',
         allow_writing_files=False
@@ -56,7 +58,9 @@ for target in all_target:
     # Réentraînement final avec les meilleures features uniquement
     X_train_top76 = X_train[top76_features]
     model_top76 = CatBoostClassifier(
-        iterations=200,
+        iterations=500,
+        depth=6,
+        l2_leaf_reg=10,
         random_seed=42,
         logging_level='Silent',
         allow_writing_files=False

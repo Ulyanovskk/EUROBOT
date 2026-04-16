@@ -11,11 +11,11 @@ if sys.stdout.encoding != 'utf-8':
 # Chargement des données de backtest
 full_data = pd.read_csv(f"CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv")
 
-# Test Out-of-sample : On teste sur les 40 derniers % (que le modèle n'a jamais vus)
-test_size = int(len(full_data) * 0.40)
+# Test Out-of-sample : On teste sur les 20 derniers % (environ 2 mois - DONNEES INCONNUES)
+test_size = int(len(full_data) * 0.20)
 backtest_data = full_data.tail(test_size).copy()
 
-print(f"Backtest sur {len(backtest_data)} bougies (40% du dataset - Donnees INCONNUES)...")
+print(f"Backtest sur {len(backtest_data)} bougies (20% du dataset - Donnees INCONNUES)...")
 
 backtest_df = apply_features(backtest_data)
 backtest_df = create_targets(backtest_df)
