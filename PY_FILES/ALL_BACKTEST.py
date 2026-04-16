@@ -47,4 +47,24 @@ for target in all_target:
     )
     send_telegram_message(msg)
 
-print("\nTous les backtests sont terminés. Résultats envoyés sur Telegram.")
+    # SAUVEGARDE DANS LE TRACKER DE PERFORMANCE (POUR EXCEL)
+    from datetime import datetime
+    import os
+    report_file = "CSV_FILES/Backtest_Performance_Tracker.csv"
+    report_data = {
+        "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "Symbol": SYMBOL,
+        "Timeframe": target,
+        "Win_Rate": analysis['win_rate'],
+        "Profit_Pips": analysis['total_profit_pips'],
+        "Total_Trades": analysis['total_trades'],
+        "Note": "Train: 80% / Test: 20% (1 an de data)"
+    }
+    
+    df_report = pd.DataFrame([report_data])
+    if not os.path.exists(report_file):
+        df_report.to_csv(report_file, index=False)
+    else:
+        df_report.to_csv(report_file, mode='a', header=False, index=False)
+
+print("\nTous les backtests sont terminés. Résultats envoyés sur Telegram et enregistrés dans le Tracker.")

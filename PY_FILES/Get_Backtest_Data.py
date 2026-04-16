@@ -28,9 +28,10 @@ def get_90_days_data():
         print(f"❌ Failed to select {SYMBOL}")
         return
 
-    # Récupération des données en 5 minutes
+    # Récupération des données en 5 minutes (On demande 100 000 bougies pour couvrir ~1 an)
     timeframe = mt5.TIMEFRAME_M5
-    rates = mt5.copy_rates_range(SYMBOL, timeframe, start_date, end_date)
+    print(f"Requesting last 100,000 candles (approx 1 year)...")
+    rates = mt5.copy_rates_from(SYMBOL, timeframe, datetime.now(), 100000)
 
     if rates is not None and len(rates) > 0:
         df = pd.DataFrame(rates)
@@ -55,9 +56,10 @@ def get_90_days_data():
         # Nettoyage
         drop_duplicate(file_path)
         
-        print(f"✅ Success! {len(df)} candles saved to {file_path}")
+        print(f"Success! {len(df)} candles saved to {file_path}")
+        print(f"Data starts from: {df['Date'].min()}")
     else:
-        print("❌ Failed to retrieve data from MT5. Make sure the market is open or your broker provides history.")
+        print("Error: Could not retrieve candles. Try opening the EURUSDm chart in MT5 and scroll back to force history download.")
 
     mt5.shutdown()
 
