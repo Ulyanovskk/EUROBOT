@@ -8,3 +8,4 @@ ta
 requests
 mplfinance
 MetaTrader5
+python-telegram-bot
