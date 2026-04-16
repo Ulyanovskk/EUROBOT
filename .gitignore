@@ -13,3 +13,6 @@ CSV_FILES/*.csv
 # IDEs
 .vscode/
 .idea/
+
+# ML artifacts
+catboost_info/

@@ -1,5 +1,4 @@
 import os
-import subprocess
 import asyncio
 import sys
 import io
