@@ -9,8 +9,8 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 # CONFIGURATION
 # ==========================================
 # Remplacez par vos vraies infos
-TELEGRAM_TOKEN = "VOTRE_BOT_TOKEN_ICI"
-ADMIN_CHAT_ID = 000000000  # Remplacez par votre Chat ID (utilisez @userinfobot sur Telegram)
+TELEGRAM_TOKEN = "8725970972:AAHKf4iYfAnVGio0Sy2LUjQ_HA1hOI2K_g4"
+ADMIN_CHAT_ID = 8458843915  # Remplacez par votre Chat ID (utilisez @userinfobot sur Telegram)
 
 # Dictionnaire pour suivre le processus en cours
 current_process = None
