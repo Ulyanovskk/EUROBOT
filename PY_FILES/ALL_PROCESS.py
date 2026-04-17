@@ -94,7 +94,7 @@ for target in all_target:
     final_model.fit(X_top, y)
     
     # Sauvegarde
-    joblib.dump({"model": final_model, "features": top_76_features}, f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
-    print(f"Fichier enregistre : {SYMBOL}_lgbm_{target}.pkl")
+    joblib.dump(final_model, f"ALL_MODELS/{SYMBOL}_catboost_{target}.pkl")
+    print(f"Fichier enregistre : {SYMBOL}_catboost_{target}.pkl")
 
 print("\n--- PROCESSUS D'ENTRAINEMENT OPTIMISE TERMINE AVEC SUCCES ---")

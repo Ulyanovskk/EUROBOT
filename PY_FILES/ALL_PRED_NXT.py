@@ -35,10 +35,10 @@ daily_trade_count = 0       # Compteur de trades du jour
 # --- CHARGEMENT DES MODELES (UNE SEULE FOIS) ---
 all_target = ['T_5M','T_10M','T_15M','T_20M','T_30M']
 models_bundles = {}
-print("Chargement des modeles IA...")
+print("Chargement des modeles IA (Comite d'experts)...")
 for target in all_target:
     try:
-        models_bundles[target] = joblib.load(f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
+        models_bundles[target] = joblib.load(f"ALL_MODELS/{SYMBOL}_catboost_{target}.pkl")
     except:
         print(f"Avertissement: Impossible de charger {target}")
 
@@ -56,12 +56,13 @@ else:
 
 def get_predictions(current_row):
     preds = {}
-    for name, bundle in models_bundles.items():
-        model = bundle['model']
-        feats = bundle['features']
-        X = current_row[feats]
+    for name, model in models_bundles.items():
+        # Utilise les noms de features internes au modele CatBoost
+        features = model.feature_names_
+        X = current_row[features]
         preds[name] = model.predict_proba(X)[0][1] * 100
     return preds
+
 
 def get_elite_score(current_row):
     if elite_expert is None: return 100.0  # Si pas d'expert, on laisse passer le trade
