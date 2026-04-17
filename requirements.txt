@@ -9,3 +9,9 @@ requests
 mplfinance
 MetaTrader5
 python-telegram-bot
+python-dotenv
+openai
+optuna
+opencv-python
+matplotlib
+scipy
