@@ -117,49 +117,54 @@ def apply_features(df):
     df['dist_to_support'] = df['Close'] - df['rolling_low']
     threshold = df['Close'] * 0.001  # 0.1%
     df['near_resistance'] = (df['dist_to_resistance'] < threshold).astype(int)
-    df['near_support'] = (df['dist_to_support'] < threshold).astype(int)
+    # --- OPTIMISATION : Calcul groupé pour éviter la fragmentation ---
+    new_cols = {}
+    
+    new_cols['near_support'] = (df['dist_to_support'] < threshold).astype(int)
 
     LOOKBACK = 20
-    df['prev_high'] = df['High'].shift(1).rolling(LOOKBACK).max()
-    df['prev_low']  = df['Low'].shift(1).rolling(LOOKBACK).min()
-    df['broke_prev_high'] = (df['High'] > df['prev_high']).astype(int)
-    df['broke_prev_low'] = (df['Low'] < df['prev_low']).astype(int)
-    df['turtle_soup_sell'] = ((df['broke_prev_high'] == 1) &(df['Close'] < df['Open'])).astype(int)
-    df['turtle_soup_buy'] = ((df['broke_prev_low'] == 1) &(df['Close'] > df['Open'])).astype(int)
+    prev_high = df['High'].shift(1).rolling(LOOKBACK).max()
+    prev_low  = df['Low'].shift(1).rolling(LOOKBACK).min()
+    broke_prev_high = (df['High'] > prev_high).astype(int)
+    broke_prev_low = (df['Low'] < prev_low).astype(int)
+    
+    new_cols['turtle_soup_sell'] = ((broke_prev_high == 1) & (df['Close'] < df['Open'])).astype(int)
+    new_cols['turtle_soup_buy'] = ((broke_prev_low == 1) & (df['Close'] > df['Open'])).astype(int)
 
     STRUCT_WINDOW = 15
-    df['structure_high'] = df['High'].rolling(STRUCT_WINDOW).max()
-    df['structure_low'] = df['Low'].rolling(STRUCT_WINDOW).min()
-    df['bos_up'] = (df['Close'] > df['structure_high'].shift(1)).astype(int)
-    df['bos_down'] = (df['Close'] < df['structure_low'].shift(1)).astype(int)
-    df['structure_direction'] = np.where(df['bos_up'] == 1, 1,np.where(df['bos_down'] == 1, -1, 0))
+    struct_high = df['High'].rolling(STRUCT_WINDOW).max()
+    struct_low = df['Low'].rolling(STRUCT_WINDOW).min()
+    bos_up = (df['Close'] > struct_high.shift(1)).astype(int)
+    bos_down = (df['Close'] < struct_low.shift(1)).astype(int)
+    
+    new_cols['structure_direction'] = np.where(bos_up == 1, 1, np.where(bos_down == 1, -1, 0))
 
     FIB_WINDOW = 50
-    df['swing_high'] = df['High'].rolling(FIB_WINDOW).max()
-    df['swing_low'] = df['Low'].rolling(FIB_WINDOW).min()
-    df['fib_38'] = df['swing_high'] - 0.382 * (df['swing_high'] - df['swing_low'])
-    df['fib_50'] = df['swing_high'] - 0.5 * (df['swing_high'] - df['swing_low'])
-    df['fib_618'] = df['swing_high'] - 0.618 * (df['swing_high'] - df['swing_low'])
-    df['dist_fib_618'] = (df['Close'] - df['fib_618']).abs()
-    df['fib_618_hit'] = (df['dist_fib_618'] < threshold).astype(int)
+    swing_high = df['High'].rolling(FIB_WINDOW).max()
+    swing_low = df['Low'].rolling(FIB_WINDOW).min()
+    fib_618 = swing_high - 0.618 * (swing_high - swing_low)
+    
+    new_cols['fib_618_hit'] = ((df['Close'] - fib_618).abs() < threshold).astype(int)
 
-    df['Candle_Strength'] = (df['Close'] - df['Open']) / (df['High'] - df['Low'] + 1e-6)
-    df['Close_Position'] = (df['Close'] - df['Low']) / (df['High'] - df['Low'] + 1e-6)
-    df['Upper_Wick'] = df['High'] - df[['Open', 'Close']].max(axis=1)
-    df['Lower_Wick'] = df[['Open', 'Close']].min(axis=1) - df['Low']
-    df['Body'] = abs(df['Close'] - df['Open'])
-    df['wick_ratio'] = (df['High'] - df['Low']) / (df['Body'] + 1e-6)
-    df['PinBar_Bull'] = ((df['Lower_Wick'] > 2 * df['Body']) & (df['Upper_Wick'] < df['Body'])).astype(int)
-    df['PinBar_Bear'] = ((df['Upper_Wick'] > 2 * df['Body']) & (df['Lower_Wick'] < df['Body'])).astype(int)
-    df['Range'] = df['High'] - df['Low']
-    df['Impulse_Bull'] = ((df['Body'] > 0.6 * df['Range']) & (df['Close'] > df['Open'])).astype(int)
-    df['Impulse_Bear'] = ((df['Body'] > 0.6 * df['Range']) & (df['Close'] < df['Open'])).astype(int)
-    df['Inside_Bar'] = ((df['High'] < df['High'].shift(1)) & (df['Low'] > df['Low'].shift(1))).astype(int)
-    df['Bull_Engulf'] = ((df['Close'] > df['Open']) &(df['Open'] < df['Close'].shift(1)) & (df['Close'] > df['Open'].shift(1))).astype(int)
-    df['Bear_Engulf'] = ((df['Close'] < df['Open']) & (df['Open'] > df['Close'].shift(1)) & (df['Close'] < df['Open'].shift(1))).astype(int)
-    df['Doji'] = (df['Body'] < 0.1 * df['Range']).astype(int)
-    df['Bull_Pressure'] = (df['Close'] > df['Open']).rolling(3).sum()
-    df['Bear_Pressure'] = (df['Close'] < df['Open']).rolling(3).sum()
+    body = abs(df['Close'] - df['Open'])
+    range_val = df['High'] - df['Low']
+    upper_wick = df['High'] - df[['Open', 'Close']].max(axis=1)
+    lower_wick = df[['Open', 'Close']].min(axis=1) - df['Low']
+    
+    new_cols['Candle_Strength'] = (df['Close'] - df['Open']) / (range_val + 1e-6)
+    new_cols['PinBar_Bull'] = ((lower_wick > 2 * body) & (upper_wick < body)).astype(int)
+    new_cols['PinBar_Bear'] = ((upper_wick > 2 * body) & (lower_wick < body)).astype(int)
+    new_cols['Impulse_Bull'] = ((body > 0.6 * range_val) & (df['Close'] > df['Open'])).astype(int)
+    new_cols['Impulse_Bear'] = ((body > 0.6 * range_val) & (df['Close'] < df['Open'])).astype(int)
+    new_cols['Inside_Bar'] = ((df['High'] < df['High'].shift(1)) & (df['Low'] > df['Low'].shift(1))).astype(int)
+    new_cols['Bull_Engulf'] = ((df['Close'] > df['Open']) & (df['Open'] < df['Close'].shift(1)) & (df['Close'] > df['Open'].shift(1))).astype(int)
+    new_cols['Bear_Engulf'] = ((df['Close'] < df['Open']) & (df['Open'] > df['Close'].shift(1)) & (df['Close'] < df['Open'].shift(1))).astype(int)
+    new_cols['Doji'] = (body < 0.1 * range_val).astype(int)
+    new_cols['Bull_Pressure'] = (df['Close'] > df['Open']).rolling(3).sum()
+    new_cols['Bear_Pressure'] = (df['Close'] < df['Open']).rolling(3).sum()
+
+    # On ajoute tout d'un coup (Évite le PerformanceWarning)
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     # feature_ = df.columns.to_list()
     # for all_feature in feature_:
@@ -557,6 +562,8 @@ def ohlc_to_image(df_ohlc, img_size=64):
     # Tracé des lignes
     for i in range(len(prices) - 1):
         cv2.line(img, (x_coords[i], y_coords[i]), (x_coords[i+1], y_coords[i+1]), (0, 0, 0), 1)
+        
+    return img # Retourne enfin l'image !
         
 def get_deepseek_vision_verdict(img_array):
     """
