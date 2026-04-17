@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 # Data and Models
-ALL_MODELS/*.pkl
+# ALL_MODELS/*.pkl
 CSV_FILES/*.csv
 
 # Environment variables
