@@ -1,11 +1,13 @@
 numpy
 pandas
 scikit-learn
-lightgbm
 catboost
 joblib
 ta
 requests
-mplfinance
 MetaTrader5
 python-telegram-bot
+optuna
+opencv-python
+Pillow
+tensorflow-cpu
