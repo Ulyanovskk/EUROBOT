@@ -201,25 +201,30 @@ try:
             last_close = row["Close"]
             tick = mt5.symbol_info_tick(SYMBOL)
             
-            # --- ANALYSE UNIQUE PAR L'EXPERT ELITE ---
+            # --- ANALYSE UNIQUE PAR L'EXPERT ELITE (EXPERIENCE) ---
             elite_score = get_elite_score(df.iloc[-1:])
             is_elite_ok = elite_score >= 60.0 
             
-            print(f"\r[{now_dt.strftime('%H:%M:%S')}] Confiance: {up_moves_mean}% | Elite: {round(elite_score, 1)}% | Trades: {daily_trade_count}/{MAX_DAILY_TRADES}", end="")
+            # --- ANALYSE VISUELLE PAR DEEPSEEK (VISION) ---
+            from func import ohlc_to_image, get_deepseek_vision_verdict
+            chart_img = ohlc_to_image(df.tail(60))
+            is_vision_ok = get_deepseek_vision_verdict(chart_img)
+            
+            print(f"\r[{now_dt.strftime('%H:%M:%S')}] Maths: {up_moves_mean}% | Elite: {round(elite_score, 1)}% | Vision: {'OK' if is_vision_ok else 'NO'} | T: {daily_trade_count}", end="")
 
-            # --- FILTRES DE TIMING ET EXCEPTION ELITE ---
+            # --- FILTRES DE TIMING ET COMITE FINAL ---
             if up_moves_mean >= THRESHOLD:
                 is_rebounding = (tick.bid > row["Open"]) and (tick.bid > last_close)
-                if is_rebounding and rsi_val < 70 and is_elite_ok:
+                if is_rebounding and rsi_val < 70 and is_elite_ok and is_vision_ok:
                     signal_direction = "BUY"
 
             elif down_moves_mean >= THRESHOLD:
                 is_dropping = (tick.ask < row["Open"]) and (tick.ask < last_close)
-                if is_dropping and rsi_val > 30 and is_elite_ok:
+                if is_dropping and rsi_val > 30 and is_elite_ok and is_vision_ok:
                     signal_direction = "SELL"
 
             if signal_direction and signal_direction not in existing_dirs:
-                print(f"\n[COMITE OK] Signal {signal_direction} valide par l'Expert Elite ({round(elite_score,1)}%). Execution...")
+                print(f"\n[COMITE UNANIME] {signal_direction} valide par Maths, Elite et Vision. Execution...")
                 pip_info = get_pip_info(mt5, SYMBOL)
                 ATR_pips = row["ATR"] / pip_info["pip_size"]
                 SL_pips = max(min(ATR_pips * 1.5, 200), 10)

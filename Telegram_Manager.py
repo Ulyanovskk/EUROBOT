@@ -351,15 +351,8 @@ def main():
     application.add_handler(CommandHandler("report", get_daily_report))
     application.add_handler(CallbackQueryHandler(button_handler))
 
-    # Configuration du polling pour survivre aux micro-coupures
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-        read_timeout=30,
-        write_timeout=30,
-        connect_timeout=30,
-        pool_timeout=30
-    )
+    # Configuration du polling simplifiee (Resilience standard)
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     main()

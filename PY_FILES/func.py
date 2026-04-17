@@ -1,13 +1,25 @@
-
 import ta
 import os
 import sys
 import io
 import joblib
+import base64
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
 import requests
 import numpy as np
 import pandas as pd
 from datetime import datetime
+
+# Chargement des variables d'environnement
+load_dotenv()
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+
+# Initialisation du client AI
+client = None
+if DEEPSEEK_API_KEY and DEEPSEEK_API_KEY != "VOTRE_CLE_ICI":
+    client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
 # Fix for Windows UnicodeEncodeError when printing emojis
 if sys.stdout.encoding != 'utf-8':
@@ -517,4 +529,39 @@ def ohlc_to_image(df_ohlc, img_size=64):
     for i in range(len(prices) - 1):
         cv2.line(img, (x_coords[i], y_coords[i]), (x_coords[i+1], y_coords[i+1]), (0, 0, 0), 1)
         
-    return img
+def get_deepseek_vision_verdict(img_array):
+    """
+    Envoie l'image du graphique a DeepSeek Vision pour validation.
+    """
+    if client is None:
+        return True # On ne bloque pas si l'API n'est pas configuree
+        
+    try:
+        # 1. Conversion de l'image (numpy array) en Base64
+        import cv2
+        _, buffer = cv2.imencode('.jpg', img_array)
+        img_base64 = base64.b64encode(buffer).decode('utf-8')
+        
+        # 2. Requete a l'IA
+        response = client.chat.completions.create(
+            model="deepseek-vision-v2", # Ou le nom exact du modele vision
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Ceci est un graphique de trading EURUSD (ligne de prix). Vois-tu une figure de retournement claire (W, M, Double Top/Bottom) ou une forte tendance ? Reponds uniquement par 'OUI' ou 'NON'."},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"},
+                        },
+                    ],
+                }
+            ],
+            max_tokens=10
+        )
+        
+        verdict = response.choices[0].message.content.strip().upper()
+        return "OUI" in verdict
+    except Exception as e:
+        print(f"Erreur Vision AI: {e}")
+        return True # Fallback amical
