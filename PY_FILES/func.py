@@ -512,7 +512,11 @@ def ohlc_to_image(df_ohlc, img_size=64):
     img = np.ones((img_size, img_size), dtype=np.uint8) * 255
     
     # On normalise les prix pour qu'ils rentrent dans le carre
-    prices = df_ohlc['Close'].values
+    # Gestion flexible de la casse (Close ou close)
+    col_name = 'Close' if 'Close' in df_ohlc.columns else 'close'
+    if col_name not in df_ohlc.columns: return img
+    
+    prices = df_ohlc[col_name].values
     if len(prices) < 2: return img
     
     min_p, max_p = np.min(prices), np.max(prices)
