@@ -46,9 +46,33 @@ def apply_features(df):
     df['Weekday'] = df['Date'].dt.weekday
     df["Date_ordinal"] = df["Date"].apply(lambda x: x.toordinal())
 
-    df["EMA_20"] = ta.trend.ema_indicator(df["Close"], window=20)
-    df["EMA_50"] = ta.trend.ema_indicator(df["Close"], window=50)
-    df["EMA_200"] = ta.trend.ema_indicator(df["Close"], window=200)
+    # 3. INDICATEURS DE TENDANCE (AVEC PENTES)
+    df['EMA_20'] = ta.trend.ema_indicator(df['Close'], window=20)
+    df['EMA_50'] = ta.trend.ema_indicator(df['Close'], window=50)
+    df['EMA_100'] = ta.trend.ema_indicator(df['Close'], window=100)
+    df['EMA_200'] = ta.trend.ema_indicator(df['Close'], window=200)
+    
+    # Calcul des Slopes (Pentes) - Comme dans votre dataset Elite
+    df['ema20Slope'] = df['EMA_20'].diff()
+    df['ema50Slope'] = df['EMA_50'].diff()
+    df['ema100Slope'] = df['EMA_100'].diff()
+
+    # 4. OSCILLATEURS
+    df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
+    stoch = ta.momentum.StochasticOscillator(df['High'], df['Low'], df['Close'], window=14, smooth_window=3)
+    df['STOCH'] = stoch.stoch()
+    df['STOCH_SIGNAL'] = stoch.stoch_signal()
+
+    # 5. CREATION DES LAGS (Historique 1 a 6)
+    # On cree des decalages pour donner du contexte temporel a l'IA
+    for i in range(1, 7):
+        df[f'rsi{i}'] = df['RSI'].shift(i)
+        df[f'stoch{i}'] = df['STOCH'].shift(i)
+        df[f'ema20Slope{i}'] = df['ema20Slope'].shift(i)
+        df[f'ema50Slope{i}'] = df['ema50Slope'].shift(i)
+        df[f'ema100Slope{i}'] = df['ema100Slope'].shift(i)
+
+    # 6. STRUCTURE DE MARCHE ET VOLATILITE
     df['TREND'] = np.where(df['EMA_50'] > df['EMA_200'], 1, -1)
 
     df["MACD"] = ta.trend.macd_diff(df["Close"])
@@ -56,8 +80,6 @@ def apply_features(df):
     df["BB_H"] = bb.bollinger_hband()
     df["BB_L"] = bb.bollinger_lband()
     df["ATR"] = ta.volatility.average_true_range(df["High"], df["Low"], df["Close"], window=14)
-    df["RSI"] = ta.momentum.rsi(df["Close"], window=14)
-    df["STOCH"] = ta.momentum.stoch(df["High"], df["Low"], df["Close"])
     df["VWAP"] = ta.volume.volume_weighted_average_price(df["High"], df["Low"], df["Close"], df["Volume"])
     df["Candle_Body"] = abs(df["Close"] - df["Open"])
     df["Body_to_Range"] = df["Candle_Body"] / (df["High"] - df["Low"]).replace(0, np.nan)
@@ -461,12 +483,38 @@ def modify_sl(mt5, ticket, new_sl, symbol):
 def check_account_info(mt5):
     account_info = mt5.account_info()
     balance = account_info.balance
-    print("Account Number:", account_info.login)
-    print("Balance:", account_info.balance)
-    print("Equity:", account_info.equity)
-    print("Free Margin:", account_info.margin_free)
-    print("Leverage:", account_info.leverage)  
+    equity = account_info.equity
+    currency = account_info.currency
+    
+    return {"balance": balance, "equity": equity, "currency": currency}
 
-
-
-
+def ohlc_to_image(df_ohlc, img_size=64):
+    """
+    Transforme un DataFrame OHLC en image 64x64 (ligne noire sur fond blanc)
+    pour l'Expert VISION.
+    """
+    import numpy as np
+    import cv2
+    
+    # On cree une image blanche
+    img = np.ones((img_size, img_size), dtype=np.uint8) * 255
+    
+    # On normalise les prix pour qu'ils rentrent dans le carre
+    prices = df_ohlc['Close'].values
+    if len(prices) < 2: return img
+    
+    min_p, max_p = np.min(prices), np.max(prices)
+    if max_p == min_p: return img
+    
+    # Echelle
+    scaled_prices = (prices - min_p) / (max_p - min_p) * (img_size - 10) + 5
+    # Inversion (en image Y=0 est en haut)
+    y_coords = img_size - scaled_prices.astype(int)
+    # X reparti sur la largeur
+    x_coords = np.linspace(5, img_size - 5, len(prices)).astype(int)
+    
+    # Tracé des lignes
+    for i in range(len(prices) - 1):
+        cv2.line(img, (x_coords[i], y_coords[i]), (x_coords[i+1], y_coords[i+1]), (0, 0, 0), 1)
+        
+    return img

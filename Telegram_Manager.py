@@ -202,21 +202,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- SOUS-MENUS ---
     if action == 'menu_train':
         keyboard = [
-            [InlineKeyboardButton("1. Recuperer Donnees", callback_data='get_data')],
-            [InlineKeyboardButton("2. Entrainer les Modeles", callback_data='train')],
-            [InlineKeyboardButton("3. Lancer Backtest", callback_data='backtest')],
+            [InlineKeyboardButton("1. Recup Donnees MT5", callback_data='get_data')],
+            [InlineKeyboardButton("2. Expert MATHEMATIQUE (Standard)", callback_data='train')],
+            [InlineKeyboardButton("3. Expert EXPERIENCE (Elite)", callback_data='train_elite')],
+            [InlineKeyboardButton("4. Expert VISION (Patterns)", callback_data='train_vision')],
             [InlineKeyboardButton("Retour", callback_data='main_menu')]
         ]
-        await query.edit_message_text("*WORKFLOW IA* (Ordre 1-2-3)", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text("*WORKFLOW ENTRAINEMENT*\n(Etape 1 puis au choix)", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
 
     if action == 'menu_logs':
         keyboard = [
             [InlineKeyboardButton("Voir l'avancement", callback_data='progress')],
             [InlineKeyboardButton("Derniers Logs", callback_data='show_logs')],
+            [InlineKeyboardButton("Lancer un Backtest", callback_data='backtest')],
             [InlineKeyboardButton("Retour", callback_data='main_menu')]
         ]
-        await query.edit_message_text("*SUIVI GENERAL*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text("*SUIVI & TESTS*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
 
     if action == 'menu_account':
@@ -294,6 +296,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Recuperation des donnees...", parse_mode='Markdown')
         asyncio.create_task(run_process_task(["PY_FILES/Get_Backtest_Data.py"], "Recup Data", context))
 
+    elif action == 'train_elite':
+        await query.edit_message_text("Lancement Expert EXPERIENCE (ELITE)...", parse_mode='Markdown')
+        asyncio.create_task(run_process_task(["PY_FILES/ALL_PROCESS_ELITE.py"], "Elite Train", context))
+
+    elif action == 'train_vision':
+        await query.edit_message_text("Lancement Expert VISION (Patterns)...", parse_mode='Markdown')
+        asyncio.create_task(run_process_task(["PY_FILES/ALL_PROCESS_VISION.py"], "Vision Train", context))
+        
     elif action == 'backtest':
         await query.edit_message_text("Lancement du BACKTEST...", parse_mode='Markdown')
         asyncio.create_task(run_process_task(["PY_FILES/ALL_BACKTEST.py"], "Backtest", context))
@@ -314,10 +324,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(status_msg, parse_mode='Markdown')
         mt5.shutdown()
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log l'erreur et ignore les erreurs reseau temporaires"""
+    import telegram.error
+    
+    if isinstance(context.error, telegram.error.NetworkError):
+        print(f"Erreur Reseau detectee : {context.error}. Le bot attendra le retour de la connexion...")
+    else:
+        print(f"Erreur d'application : {context.error}")
+        # On pourrait logger l'erreur complete ici si besoin
+
 def main():
-    """Lancement du bot Telegram"""
-    print("Telegram Manager en attente de commandes...")
+    """Lancement du bot Telegram avec haute resilience"""
+    print("Telegram Manager en attente de commandes (Mode Resilience actif)...")
+    
+    # Configuration de l'application
     application = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    # Ajout du gestionnaire d'erreurs
+    application.add_error_handler(error_handler)
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("log", get_logs))
@@ -326,7 +351,15 @@ def main():
     application.add_handler(CommandHandler("report", get_daily_report))
     application.add_handler(CallbackQueryHandler(button_handler))
 
-    application.run_polling()
+    # Configuration du polling pour survivre aux micro-coupures
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+        read_timeout=30,
+        write_timeout=30,
+        connect_timeout=30,
+        pool_timeout=30
+    )
 
 if __name__ == '__main__':
     main()

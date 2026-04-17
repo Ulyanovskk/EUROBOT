@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import sys
 import io
+import os
 import MetaTrader5 as mt5
 from datetime import datetime
 from func import apply_features,calc_lot_size,place_buy,check_account_info,place_sell,create_targets,SYMBOL,normalize_lot,get_symbol_volume_info,get_pip_info,log_trade,modify_sl
@@ -34,13 +35,40 @@ daily_trade_count = 0       # Compteur de trades du jour
 # --- CHARGEMENT DES MODELES (UNE SEULE FOIS) ---
 all_target = ['T_5M','T_10M','T_15M','T_20M','T_30M']
 models_bundles = {}
-print("Chargement des modèles IA...")
+print("Chargement des modeles IA...")
 for target in all_target:
     try:
         models_bundles[target] = joblib.load(f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
-    except Exception as e:
-        print(f"ERREUR: Impossible de charger le modèle {target}: {e}")
-        quit()
+    except:
+        print(f"Avertissement: Impossible de charger {target}")
+
+# --- Chargement de l'Expert Elite ---
+elite_expert = None
+elite_path = f"ELITE_MODELS/{SYMBOL}_Elite_Expert.pkl"
+if os.path.exists(elite_path):
+    try:
+        elite_expert = joblib.load(elite_path)
+        print("-> Expert EXPERIENCE (Elite) charge avec succes.")
+    except:
+        print("-> Erreur lors du chargement de l'Expert Elite.")
+else:
+    print("-> Expert EXPERIENCE non trouve (Le bot tournera sans le filtre Elite).")
+
+def get_predictions(current_row):
+    preds = {}
+    for name, bundle in models_bundles.items():
+        model = bundle['model']
+        feats = bundle['features']
+        X = current_row[feats]
+        preds[name] = model.predict_proba(X)[0][1] * 100
+    return preds
+
+def get_elite_score(current_row):
+    if elite_expert is None: return 100.0  # Si pas d'expert, on laisse passer le trade
+    model = elite_expert['model']
+    feats = elite_expert['features']
+    X = current_row[feats]
+    return model.predict_proba(X)[0][1] * 100
 
 try:
     while True:
@@ -161,51 +189,37 @@ try:
         # --- PRISE DE POSITION ---
         nb_positions = len(current_positions)
         if nb_positions < MAX_POSITIONS:
-            # Récupérer les directions déjà ouvertes
             existing_dirs = []
             for p in current_positions:
                 existing_dirs.append("BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL")
 
-            # --- FILTRES DE TIMING (REBOND) ---
+            # --- REGLAGES ET DONNEES TEMPS REEL ---
             THRESHOLD = 55
             signal_direction = None
-            
-            # Recuperation du RSI et des prix actuels pour le timing
             row = df.iloc[-1]
             rsi_val = row["RSI"]
             last_close = row["Close"]
             tick = mt5.symbol_info_tick(SYMBOL)
             
-            # Logique de Direction IA
-            if up_moves_mean >= THRESHOLD and up_moves_mean > down_moves_mean:
-                # OPTIMISATION BUY : Attendre que le prix rebondisse
-                # 1. Le prix actuel (bid) doit etre superieur a l'ouverture (bougie verte)
-                # 2. Le prix doit etre au-dessus de la clôture de la bougie precedente (rebond confirme)
-                # 3. Le RSI ne doit pas etre deja en sur-achat (> 70)
+            # --- ANALYSE UNIQUE PAR L'EXPERT ELITE ---
+            elite_score = get_elite_score(df.iloc[-1:])
+            is_elite_ok = elite_score >= 60.0 
+            
+            print(f"\r[{now_dt.strftime('%H:%M:%S')}] Confiance: {up_moves_mean}% | Elite: {round(elite_score, 1)}% | Trades: {daily_trade_count}/{MAX_DAILY_TRADES}", end="")
+
+            # --- FILTRES DE TIMING ET EXCEPTION ELITE ---
+            if up_moves_mean >= THRESHOLD:
                 is_rebounding = (tick.bid > row["Open"]) and (tick.bid > last_close)
-                
-                if is_rebounding and rsi_val < 70:
+                if is_rebounding and rsi_val < 70 and is_elite_ok:
                     signal_direction = "BUY"
-                else:
-                    if up_moves_mean > 60: # On previent que le signal est la mais attend le timing
-                        print(f" -> Signal BUY en attente de rebond (RSI: {round(rsi_val,1)})")
 
-            elif down_moves_mean >= THRESHOLD and down_moves_mean > up_moves_mean:
-                # OPTIMISATION SELL : Attendre que le prix chute
-                # 1. Le prix actuel (ask) doit etre inferieur a l'ouverture (bougie rouge)
-                # 2. Le prix doit etre sous la clôture precedente
-                # 3. Le RSI ne doit pas etre deja en sur-vente (< 30)
+            elif down_moves_mean >= THRESHOLD:
                 is_dropping = (tick.ask < row["Open"]) and (tick.ask < last_close)
-                
-                if is_dropping and rsi_val > 30:
+                if is_dropping and rsi_val > 30 and is_elite_ok:
                     signal_direction = "SELL"
-                else:
-                    if down_moves_mean > 60:
-                        print(f" -> Signal SELL en attente de baisse (RSI: {round(rsi_val,1)})")
 
-            # Exécution si le Timing est validé
             if signal_direction and signal_direction not in existing_dirs:
-                print(f"\n[TIMING OK] Signal {signal_direction} confirme par le prix. Execution...")
+                print(f"\n[COMITE OK] Signal {signal_direction} valide par l'Expert Elite ({round(elite_score,1)}%). Execution...")
                 pip_info = get_pip_info(mt5, SYMBOL)
                 ATR_pips = row["ATR"] / pip_info["pip_size"]
                 SL_pips = max(min(ATR_pips * 1.5, 200), 10)
