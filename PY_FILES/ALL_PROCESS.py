@@ -1,77 +1,91 @@
-import ta
 import joblib
 import numpy as np
 import pandas as pd
 import sys
 import io
 import os
+import optuna
 from catboost import CatBoostClassifier
+from sklearn.model_selection import TimeSeriesSplit
 from func import apply_features, create_targets, SYMBOL
 
-# Fix for Windows UnicodeEncodeError when printing emojis
+# Fix pour Windows
 if sys.stdout.encoding != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-# 1. Chargement des données
 os.makedirs("ALL_MODELS", exist_ok=True)
 full_data = pd.read_csv(f'CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv') 
 
-# Split Train/Test : On n'apprend que sur les 80 premiers % des données (1 an)
-train_size = int(len(full_data) * 0.80)
-data = full_data.head(train_size).copy()
-
-print(f"Entrainement sur {len(data)} bougies (80% du dataset)...")
-
-df = apply_features(data)
+# On utilise les 300 derniers jours pour l'entrainement total
+print(f"Preparation des donnees pour {SYMBOL}...")
+df = apply_features(full_data)
 df = create_targets(df)
 df.dropna(inplace=True)
 
 all_target = ['T_5M', 'T_10M', 'T_15M', 'T_20M', 'T_30M']
-train_df = df.copy()
-X_train = train_df.drop(columns=all_target)
 
-# 2. Boucle d'entraînement pour chaque Timeframe
+def objective(trial, X, y):
+    # Espace de recherche des parametres CatBoost
+    params = {
+        "iterations": 500,
+        "depth": trial.suggest_int("depth", 4, 10),
+        "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.1, log=True),
+        "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1.0, 15.0),
+        "random_seed": 42,
+        "logging_level": 'Silent',
+        "allow_writing_files": False
+    }
+    
+    # Validation Croisee Temporelle (3 Folds)
+    tscv = TimeSeriesSplit(n_splits=3)
+    scores = []
+    
+    for train_index, test_index in tscv.split(X):
+        X_t, X_v = X.iloc[train_index], X.iloc[test_index]
+        y_t, y_v = y.iloc[train_index], y.iloc[test_index]
+        
+        model = CatBoostClassifier(**params)
+        model.fit(X_t, y_t, eval_set=(X_v, y_v), early_stopping_rounds=50)
+        
+        # On score sur l'accuracy (ou F1 si on veut plus de precision)
+        scores.append(model.get_best_score()['validation']['Logloss'])
+        
+    return np.mean(scores)
+
+# Boucle d'optimisation et d'entrainement
 for target in all_target:
-    print(f"Entraînement CatBoost pour la cible : {target}...")
-    y_train = train_df[target]
+    print(f"\n--- OPTIMISATION OPTUNA : {target} ---")
     
-    # Premier passage pour identifier les meilleures features
-    model = CatBoostClassifier(
-        iterations=300,
-        depth=6,
-        l2_leaf_reg=10,
-        random_seed=42,
-        logging_level='Silent',
-        allow_writing_files=False
-    )
+    y = df[target]
+    X = df.drop(columns=all_target)
     
-    model.fit(X_train, y_train)
-    importance = model.get_feature_importance()
-    feature_names = X_train.columns.to_list()
-    sort_indx = np.argsort(importance)[::-1]
+    # Etape 1 : Feature Selection Rapide
+    pre_model = CatBoostClassifier(iterations=300, logging_level='Silent', allow_writing_files=False)
+    pre_model.fit(X, y)
+    importance = pre_model.get_feature_importance()
+    top_76_features = [X.columns[i] for i in np.argsort(importance)[::-1][:76]]
+    X_top = X[top_76_features]
+    
+    # Etape 2 : Recherche Optuna
+    study = optuna.create_study(direction="minimize")
+    study.optimize(lambda trial: objective(trial, X_top, y), n_trials=20)
+    
+    print(f"Meilleurs parametres pour {target}: {study.best_params}")
+    
+    # Etape 3 : Entrainement Final
+    final_params = {
+        **study.best_params,
+        "iterations": 1000,
+        "random_seed": 42,
+        "logging_level": 'Silent',
+        "allow_writing_files": False
+    }
+    
+    final_model = CatBoostClassifier(**final_params)
+    final_model.fit(X_top, y)
+    
+    # Sauvegarde
+    joblib.dump({"model": final_model, "features": top_76_features}, f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
+    print(f"Fichier enregistre : {SYMBOL}_lgbm_{target}.pkl")
 
-    # On garde les 76 meilleures features
-    top_76_indx = sort_indx[:76]
-    top76_features = [feature_names[i] for i in top_76_indx]
-    print(f"TOP 76 FEATURES selectionnees pour {target}.")
-
-    # Réentraînement final avec les meilleures features uniquement
-    X_train_top76 = X_train[top76_features]
-    model_top76 = CatBoostClassifier(
-        iterations=500,
-        depth=6,
-        l2_leaf_reg=10,
-        random_seed=42,
-        logging_level='Silent',
-        allow_writing_files=False
-    )
-    model_top76.fit(X_train_top76, y_train)
-
-
-    # Sauvegarde du modèle (bundle)
-    # Note: On garde le nom "lgbm" dans le fichier pour ne pas avoir à modifier les autres scripts
-    joblib.dump({"model": model_top76, "features": top76_features}, f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
-    print(f"Modele enregistre : ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
-    print('-------------------------------------')
-
-print("Entrainement de tous les modeles termine avec succes (Moteur: CatBoost).")
+print("\n--- PROCESSUS D'ENTRAINEMENT OPTIMISE TERMINE AVEC SUCCES ---")

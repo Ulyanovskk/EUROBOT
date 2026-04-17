@@ -235,7 +235,12 @@ def drop_duplicate(path):
     all_df.to_csv(path, index=False)
 
 
-def create_targets(df):
+def create_targets(df, pip_threshold=2.5):
+    """
+    Cree des cibles intelligentes : 
+    1 si le prix monte de plus de pip_threshold pips dans l'horizon.
+    Ignore les mouvements trop faibles (bruit).
+    """
     horizons = {
         "T_5M": 1,
         "T_10M": 2,
@@ -243,11 +248,19 @@ def create_targets(df):
         "T_20M": 4,
         "T_30M": 6
     }
+    
+    # On recupere la taille du pip pour EURUSDm
+    pip_size = 0.0001
+    
     for name, step in horizons.items():
-        future_close = df['Close'].shift(-step)
-        log_return = np.log(future_close / df['Close'])
-        df[name] = (log_return > 0).astype(int)
-    df = df.iloc[:-6]
+        # Variation de prix future (Close_futur - Close_actuel)
+        future_change = df['Close'].shift(-step) - df['Close']
+        future_pips = future_change / pip_size
+        
+        # Label 1 si mouvement > seuil pips, sinon 0
+        df[name] = (future_pips > pip_threshold).astype(int)
+        
+    df = df.iloc[:-10] # Supprimer les dernieres lignes sans futur
     return df
 
 
