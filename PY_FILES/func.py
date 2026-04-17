@@ -319,9 +319,19 @@ def trade_backtest(df, model, feature_cols, threshold=55, atr_sl=1.5, atr_tp=4.5
             
         # Filtre 2 : Expert ELITE (Experience)
         if elite_model is not None:
-            # On verifie si elite_model est un dictionnaire ou le modele direct
-            actual_elite = elite_model['model'] if isinstance(elite_model, dict) else elite_model
-            elite_proba = actual_elite.predict_proba(X)[0][1]
+            # On recupere le modele et ses features
+            if isinstance(elite_model, dict):
+                actual_elite = elite_model['model']
+                elite_features = elite_model['features']
+            else:
+                actual_elite = elite_model
+                elite_features = actual_elite.feature_names_
+
+            # On s'assure que les colonnes sont dans le BON ORDRE pour l'elite
+            # On cree un DataFrame d'une seule ligne avec les noms de colonnes
+            X_elite = pd.DataFrame([row[elite_features].values], columns=elite_features)
+            
+            elite_proba = actual_elite.predict_proba(X_elite)[0][1]
             if elite_proba < 0.50: # Seuil de conviction Elite
                 i += 1
                 continue
