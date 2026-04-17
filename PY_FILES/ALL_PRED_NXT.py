@@ -21,6 +21,7 @@ print(f"Bot started for {SYMBOL}...")
 
 # Paramètres du Circuit Breaker (Ajustés pour capital 50$)
 DAILY_LOSS_LIMIT_PCT = 20.0  # Seuil augmenté pour supporter les lots minimum de 0.01
+MAX_POSITIONS = 2           # Nombre maximum de positions simultanées autorisées
 starting_daily_balance = mt5.account_info().balance
 current_day = datetime.now().date()
 last_known_positions = [] # Pour suivre les fermetures
@@ -87,14 +88,16 @@ try:
         print(f"\nInformation: Confiance: UP {up_moves_mean}% | DOWN {down_moves_mean}%")
 
         # --- SURVEILLANCE DES FERMETURES ---
-        current_positions = mt5.positions_get(symbol=SYMBOL)
-        current_ticket_ids = [p.ticket for p in current_positions] if current_positions else []
+        # NOTE: mt5.positions_get() peut retourner None (pas de tuple vide) -> normaliser
+        raw_positions = mt5.positions_get(symbol=SYMBOL)
+        current_positions = raw_positions if raw_positions is not None else []
+        current_ticket_ids = [p.ticket for p in current_positions]
         
         # Si on avait une position et qu'on ne l'a plus
         for old_ticket in last_known_positions:
             if old_ticket not in current_ticket_ids:
                 # La position a été fermee ! On récupère le résultat
-                from datetime import datetime, timedelta
+                from datetime import timedelta
                 history = mt5.history_deals_get(datetime.now() - timedelta(minutes=5), datetime.now())
                 if history:
                     for deal in history:
@@ -107,14 +110,20 @@ try:
                                    f"Balance : `{mt5.account_info().balance} EUR`")
                             from func import send_telegram_message
                             send_telegram_message(msg)
+                            print(f"[FERMETURE] Ticket {old_ticket} ferme | {status_text} : {round(profit, 2)} EUR")
         
         last_known_positions = current_ticket_ids
         # ------------------------------------
 
-        has_position = len(current_positions) > 0
+        # Re-fetch frais pour s'assurer que has_position reflète l'état réel
+        fresh_positions = mt5.positions_get(symbol=SYMBOL)
+        nb_positions = len(fresh_positions) if fresh_positions is not None else 0
+        has_position = nb_positions >= MAX_POSITIONS
 
         if has_position:
-            print(f"Information: Position deja ouverte sur {SYMBOL}. En attente...")
+            print(f"Information: Limite de {MAX_POSITIONS} positions atteinte ({nb_positions}/{MAX_POSITIONS}). En attente...")
+        elif nb_positions > 0:
+            print(f"Information: {nb_positions}/{MAX_POSITIONS} position(s) ouverte(s). Recherche de signal...")
         else:
             THRESHOLD = 55
             if up_moves_mean >= THRESHOLD and up_moves_mean > down_moves_mean:
