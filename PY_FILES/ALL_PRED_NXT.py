@@ -7,7 +7,7 @@ import sys
 import io
 import MetaTrader5 as mt5
 from datetime import datetime
-from func import apply_features,calc_lot_size,place_buy,check_account_info,place_sell,create_targets,SYMBOL,normalize_lot,get_symbol_volume_info,get_pip_info,log_trade
+from func import apply_features,calc_lot_size,place_buy,check_account_info,place_sell,create_targets,SYMBOL,normalize_lot,get_symbol_volume_info,get_pip_info,log_trade,modify_sl
 
 # Fix for Windows UnicodeEncodeError when printing emojis
 if sys.stdout.encoding != 'utf-8':
@@ -24,6 +24,7 @@ DAILY_LOSS_LIMIT_PCT = 20.0
 MAX_POSITIONS = 2           
 MAX_DAILY_TRADES = 6        # Limite de trades total par jour
 ALLOWED_HOURS = range(7, 21) # Session Londres + New York (7h-20h)
+TRAILING_STOP_ATR_MULT = 1.5 # Distance du trailing (ATR * mult)
 
 starting_daily_balance = mt5.account_info().balance
 current_day = datetime.now().date()
@@ -109,11 +110,36 @@ try:
         up_moves_mean = round(sum(up_moves.values())/len(up_moves), 2) 
         down_moves_mean = round(sum(down_moves.values())/len(down_moves), 2)
         
+        # --- GESTION DU TRAILING STOP ---
+        raw_positions = mt5.positions_get(symbol=SYMBOL)
+        current_positions = raw_positions if raw_positions is not None else []
+        
+        atr_value = df.iloc[-1]["ATR"]
+        trailing_dist = atr_value * TRAILING_STOP_ATR_MULT
+
+        for p in current_positions:
+            ticket = p.ticket
+            current_sl = p.sl
+            p_type = p.type # 0 = BUY, 1 = SELL
+            price = p.price_current
+            
+            if p_type == mt5.ORDER_TYPE_BUY:
+                new_sl = round(price - trailing_dist, 5)
+                # Le SL ne doit que MONTER
+                if new_sl > current_sl + (0.00005): # Seuil de 0.5 pips pour eviter trop d'appels
+                    if modify_sl(mt5, ticket, new_sl, SYMBOL):
+                        print(f"\n[TRAILING] BUY Ticket {ticket}: Nouveau SL -> {new_sl}")
+            
+            elif p_type == mt5.ORDER_TYPE_SELL:
+                new_sl = round(price + trailing_dist, 5)
+                # Le SL ne doit que DESCENDRE (ou etre initialise si 0)
+                if current_sl == 0 or new_sl < current_sl - (0.00005):
+                    if modify_sl(mt5, ticket, new_sl, SYMBOL):
+                        print(f"\n[TRAILING] SELL Ticket {ticket}: Nouveau SL -> {new_sl}")
+
         print(f"\r[{now_dt.strftime('%H:%M:%S')}] Confiance: UP {up_moves_mean}% | DOWN {down_moves_mean}% | Trades: {daily_trade_count}/{MAX_DAILY_TRADES}", end="")
 
         # --- SURVEILLANCE DES FERMETURES ---
-        raw_positions = mt5.positions_get(symbol=SYMBOL)
-        current_positions = raw_positions if raw_positions is not None else []
         current_ticket_ids = [p.ticket for p in current_positions]
         
         for old_ticket in last_known_positions:
@@ -124,11 +150,11 @@ try:
                     for deal in history:
                         if deal.position_id == old_ticket and deal.entry == mt5.DEAL_ENTRY_OUT:
                             profit = deal.profit + deal.commission + deal.swap
-                            msg = (f"--- TRADE FERMÉ ({'PROFIT' if profit > 0 else 'LOSS'}) ---\n"
+                            msg = (f"--- TRADE FERME ({'PROFIT' if profit > 0 else 'LOSS'}) ---\n"
                                    f"Ticket: `{old_ticket}` | Gain: `{round(profit, 2)} EUR`")
                             from func import send_telegram_message
                             send_telegram_message(msg)
-                            print(f"\n[FERMETURE] Ticket {old_ticket} fermé: {round(profit, 2)} EUR")
+                            print(f"\n[FERMETURE] Ticket {old_ticket} ferme: {round(profit, 2)} EUR")
         
         last_known_positions = current_ticket_ids
 

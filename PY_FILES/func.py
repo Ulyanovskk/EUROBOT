@@ -424,6 +424,27 @@ def log_trade(symbol, direction, entry_price, SL, TP, lot_size, proba_up, proba_
 
 
 
+def modify_sl(mt5, ticket, new_sl, symbol):
+    """Modifie le Stop Loss d'une position existante"""
+    position = mt5.positions_get(ticket=ticket)
+    if not position:
+        return False
+    
+    pos = position[0]
+    request = {
+        "action": mt5.TRADE_ACTION_SLTP,
+        "symbol": symbol,
+        "position": ticket,
+        "sl": new_sl,
+        "tp": pos.tp, # On ne change pas le TP
+        "magic": pos.magic
+    }
+    
+    result = mt5.order_send(request)
+    if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+        return True
+    return False
+
 def check_account_info(mt5):
     account_info = mt5.account_info()
     balance = account_info.balance

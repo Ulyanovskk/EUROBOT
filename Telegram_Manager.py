@@ -160,32 +160,43 @@ async def get_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, parse_mode='Markdown')
     mt5.shutdown()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Menu principal avec boutons"""
-    if update.effective_user.id != ADMIN_CHAT_ID:
-        await update.message.reply_text("Acces refuse.")
-        return
-
+async def send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, edit=False):
+    """Affiche ou modifie le menu principal"""
     status_text_icon = "[RUNNING]" if current_process else "[WAITING]"
     status_text = f"{status_text_icon} En cours : {current_task_name}" if current_process else "[READY] Pret"
     
     keyboard = [
         [InlineKeyboardButton("Lancer Trading Live", callback_data='live')],
-        [InlineKeyboardButton("Entraîner / Backtest", callback_data='menu_train')],
+        [InlineKeyboardButton("Entrainer / Backtest", callback_data='menu_train')],
         [InlineKeyboardButton("Avancement & Logs", callback_data='menu_logs')],
         [InlineKeyboardButton("Compte & Report", callback_data='menu_account')],
         [InlineKeyboardButton("STOP TOUT", callback_data='stop')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(f'EUROBOT - Tour de Controle\nStatut : {status_text}\n\nActions disponibles :', reply_markup=reply_markup)
+    text = f'*EUROBOT - Tour de Controle*\nStatut : `{status_text}`\n\nActions disponibles :'
+    
+    if edit and update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    else:
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande /start"""
+    if update.effective_user.id != ADMIN_CHAT_ID:
+        await update.message.reply_text("Acces refuse.")
+        return
+    await send_main_menu(update, context)
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gère les clics sur les boutons et les sous-menus"""
     global current_process, current_task_name, last_status_msg
     query = update.callback_query
-    await query.answer()
+    
+    if query.from_user.id != ADMIN_CHAT_ID: 
+        await query.answer("Acces refuse.", show_alert=True)
+        return
 
-    if query.from_user.id != ADMIN_CHAT_ID: return
+    await query.answer()
     action = query.data
 
     # --- SOUS-MENUS ---
@@ -196,7 +207,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("3. Lancer Backtest", callback_data='backtest')],
             [InlineKeyboardButton("Retour", callback_data='main_menu')]
         ]
-        await query.edit_message_text("--- WORKFLOW IA (Ordre 1-2-3) ---", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text("*WORKFLOW IA* (Ordre 1-2-3)", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
 
     if action == 'menu_logs':
@@ -205,22 +216,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("Derniers Logs", callback_data='show_logs')],
             [InlineKeyboardButton("Retour", callback_data='main_menu')]
         ]
-        await query.edit_message_text("--- SUIVI GENERAL ---", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text("*SUIVI GENERAL*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
 
     if action == 'menu_account':
         keyboard = [
             [InlineKeyboardButton("Mon Solde", callback_data='status')],
             [InlineKeyboardButton("Mes Positions", callback_data='positions')],
-            [InlineKeyboardButton("État du Risque", callback_data='risk')],
+            [InlineKeyboardButton("Etat du Risque", callback_data='risk')],
             [InlineKeyboardButton("Rapport Journalier", callback_data='report')],
             [InlineKeyboardButton("Retour", callback_data='main_menu')]
         ]
-        await query.edit_message_text("--- COMPTE & PERFORMANCE ---", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text("*COMPTE & PERFORMANCE*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
 
     if action == 'main_menu':
-        await start(query, context) # On réutilise start
+        await send_main_menu(update, context, edit=True)
         return
 
     # --- ACTIONS DIRECTES ---
@@ -228,91 +239,80 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if current_process:
             task_name = current_task_name
             try:
+                # Sur Windows on essaie de tuer proprement puis brutalement
                 current_process.terminate()
-                # Sur Windows, terminate() est parfois ignoré par les sous-processus Python
-                # On attend une seconde et on kill si c'est toujours là
-                await asyncio.sleep(0.5)
-                if current_process:
-                    current_process.kill()
-            except:
-                pass
+                await asyncio.sleep(1)
+                if current_process: current_process.kill()
+            except: pass
             
             current_process = None
             current_task_name = ""
-            last_status_msg = "Arrete par l'utilisateur."
-            add_to_log("Arret GLOBAL DETECTE")
-            
-            # On s'assure que MT5 est coupé si le bot était en live
-            try: mt5.shutdown()
-            except: pass
-            
-            await query.edit_message_text(f"STOP: Processus '{task_name}' arrêté. Le bot est à nouveau disponible.")
+            last_status_msg = "Arrete."
+            add_to_log("ARRET GLOBAL PAR L'UTILISATEUR")
+            await query.edit_message_text(f"DONE: Processus `{task_name}` arrete.")
         else:
-            await query.edit_message_text("INFO: Aucun processus n'est en cours.")
+            await query.answer("Aucun processus en cours.")
         return
 
     if action == 'progress':
-        if current_process:
-            await query.message.reply_text(f"AVANCEMENT : {current_task_name}\n\nDernier log :\n`{last_status_msg}`", parse_mode='Markdown')
-        else:
-            await query.message.reply_text("Aucun processus actif.")
+        msg = f"Tache active : `{current_task_name if current_task_name else 'Aucune'}`\n\nDernier Log :\n`{last_status_msg}`"
+        await query.message.reply_text(msg, parse_mode='Markdown')
         return
 
     if action == 'show_logs':
-        if not log_buffer:
-            await query.message.reply_text("Aucun log en mémoire.")
-        else:
-            log_text = "\n".join(log_buffer)
-            await query.message.reply_text(f"--- DERNIERS LOGS ---\n\n```\n{log_text}\n```", parse_mode='Markdown')
+        log_text = "\n".join(log_buffer) if log_buffer else "Aucun log."
+        await query.message.reply_text(f"*DERNIERS LOGS*\n\n```\n{log_text}\n```", parse_mode='Markdown')
         return
 
     if action == 'positions':
-        await get_positions(query, context)
+        # On utilise une fonction séparée pour éviter de bloquer
+        await get_positions(update, context)
         return
         
     if action == 'risk':
-        await get_risk_status(query, context)
+        await get_risk_status(update, context)
         return
         
     if action == 'report':
-        await get_daily_report(query, context)
+        await get_daily_report(update, context)
         return
 
     # --- LANCEMENT DE PROCESSUS ---
     if current_process and action in ['live', 'train', 'backtest', 'get_data']:
-        await query.edit_message_text(f"Attention: Un processus ('{current_task_name}') est deja en cours.")
+        await query.answer(f"Attention: Une tache ({current_task_name}) est deja en cours.", show_alert=True)
         return
 
     if action == 'live':
-        await query.edit_message_text("Lancement du TRADING LIVE...")
+        await query.edit_message_text("Lancement du TRADING LIVE...", parse_mode='Markdown')
         asyncio.create_task(run_process_task(["PY_FILES/ALL_PRED_NXT.py"], "Trading Live", context))
         
     elif action == 'train':
-        await query.edit_message_text("Lancement de l'ENTRAINEMENT...")
-        asyncio.create_task(run_process_task(["PY_FILES/ALL_PROCESS.py"], "Entrainement Modeles", context))
+        await query.edit_message_text("Lancement de l'ENTRAINEMENT...", parse_mode='Markdown')
+        asyncio.create_task(run_process_task(["PY_FILES/ALL_PROCESS.py"], "Entrainement", context))
 
     elif action == 'get_data':
-        await query.edit_message_text("Recuperation des donnees historiques...")
-        asyncio.create_task(run_process_task(["PY_FILES/Get_Backtest_Data.py"], "Recuperation Data", context))
+        await query.edit_message_text("Recuperation des donnees...", parse_mode='Markdown')
+        asyncio.create_task(run_process_task(["PY_FILES/Get_Backtest_Data.py"], "Recup Data", context))
 
     elif action == 'backtest':
-        await query.edit_message_text("Lancement de l'Analyse Backtest...")
-        asyncio.create_task(run_process_task(["PY_FILES/ALL_BACKTEST.py"], "Backtest Analyse", context))
+        await query.edit_message_text("Lancement du BACKTEST...", parse_mode='Markdown')
+        asyncio.create_task(run_process_task(["PY_FILES/ALL_BACKTEST.py"], "Backtest", context))
 
     elif action == 'status':
         if not mt5.initialize():
-            await query.edit_message_text("Erreur MT5.")
+            await query.answer("Erreur MT5.", show_alert=True)
             return
         account = mt5.account_info()
-        status_msg = (
-            f"--- ETAT DU COMPTE ---\n"
-            f"Solde : {account.balance} {account.currency}\n"
-            f"Equite : {account.equity} {account.currency}\n"
-            f"Marge Libre : {account.margin_free} {account.currency}\n"
-            f"Levier : 1:{account.leverage}"
-        )
+        if account:
+            status_msg = (
+                f"*ETAT DU COMPTE*\n\n"
+                f"Solde : `{account.balance} {account.currency}`\n"
+                f"Equite : `{account.equity} {account.currency}`\n"
+                f"Marge Libre : `{account.margin_free} {account.currency}`\n"
+                f"Levier : `1:{account.leverage}`"
+            )
+            await query.message.reply_text(status_msg, parse_mode='Markdown')
         mt5.shutdown()
-        await query.edit_message_text(status_msg)
 
 def main():
     """Lancement du bot Telegram"""
