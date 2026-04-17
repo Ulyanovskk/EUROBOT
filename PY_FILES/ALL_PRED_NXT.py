@@ -19,160 +19,169 @@ if not mt5.initialize():
 
 print(f"Bot started for {SYMBOL}...")
 
-# Paramètres du Circuit Breaker (Ajustés pour capital 50$)
-DAILY_LOSS_LIMIT_PCT = 20.0  # Seuil augmenté pour supporter les lots minimum de 0.01
-MAX_POSITIONS = 2           # Nombre maximum de positions simultanées autorisées
+# Paramètres du Circuit Breaker et Limites
+DAILY_LOSS_LIMIT_PCT = 20.0  
+MAX_POSITIONS = 2           
+MAX_DAILY_TRADES = 6        # Limite de trades total par jour
+ALLOWED_HOURS = range(7, 21) # Session Londres + New York (7h-20h)
+
 starting_daily_balance = mt5.account_info().balance
 current_day = datetime.now().date()
-last_known_positions = [] # Pour suivre les fermetures
+last_known_positions = [] 
+daily_trade_count = 0       # Compteur de trades du jour
+
+# --- CHARGEMENT DES MODELES (UNE SEULE FOIS) ---
+all_target = ['T_5M','T_10M','T_15M','T_20M','T_30M']
+models_bundles = {}
+print("Chargement des modèles IA...")
+for target in all_target:
+    try:
+        models_bundles[target] = joblib.load(f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
+    except Exception as e:
+        print(f"ERREUR: Impossible de charger le modèle {target}: {e}")
+        quit()
 
 try:
     while True:
-        # Vérification du changement de jour pour le Circuit Breaker
         now_dt = datetime.now()
+        
+        # Réinitialisation journalière (Profit/Perte + Compteur de trades)
         if now_dt.date() > current_day:
-            print(f"Nouveau jour detecte ({now_dt.date()}). Reinitialisation du capital de reference.")
+            print(f"Nouveau jour détecté ({now_dt.date()}). Réinitialisation...")
             current_day = now_dt.date()
             starting_daily_balance = mt5.account_info().balance
+            daily_trade_count = 0
 
-        # Calcul du Drawdown journalier
+        # 1. Filtre de Session
+        if now_dt.hour not in ALLOWED_HOURS:
+            if now_dt.minute % 15 == 0 and now_dt.second < 10: # Log toutes les 15 min
+                print(f"Hors session de trading ({now_dt.hour}h). En attente de 07:00...")
+            time.sleep(10)
+            continue
+
+        # 2. Vérification Limite de Trades Journalière
+        if daily_trade_count >= MAX_DAILY_TRADES:
+            if now_dt.minute % 15 == 0 and now_dt.second < 10:
+                print(f"Limite journalière de {MAX_DAILY_TRADES} trades atteinte. Reprise demain.")
+            time.sleep(10)
+            continue
+
+        # 3. Circuit Breaker (Drawdown)
         account = mt5.account_info()
         equity = account.equity
         current_drawdown_pct = ((starting_daily_balance - equity) / starting_daily_balance) * 100
 
         if current_drawdown_pct >= DAILY_LOSS_LIMIT_PCT:
             print(f"CIRCUIT BREAKER ACTIF : Perte de {round(current_drawdown_pct, 2)}% atteinte.")
-            print(f"Information: Trading suspendu jusqu'a demain. (Start Balance: {starting_daily_balance}, Equity: {equity})")
             time.sleep(60)
             continue
 
+        # --- Analyse Technique ---
         TIMEFRAME = mt5.TIMEFRAME_M5
         N_BARS = 2000
-
         rates = mt5.copy_rates_from_pos(SYMBOL, TIMEFRAME, 1, N_BARS)
 
         if rates is None or len(rates) < N_BARS:
-            print("ERREUR: Failed to fetch enough closed candles. Retrying in 10s...")
+            print("ERREUR: Données MT5 insuffisantes. Retry...")
             time.sleep(10)
             continue
 
         data = pd.DataFrame(rates)
         data['Date'] = pd.to_datetime(data['time'], unit='s')
         data.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'tick_volume': 'Volume'}, inplace=True)
-
-        new_df = data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']].copy()
-        new_df.sort_values('Date', inplace=True)
-        new_df.reset_index(drop=True, inplace=True)
-
-        df = apply_features(new_df)
+        df = apply_features(data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']].copy())
         df.dropna(inplace=True)
 
-        all_target = ['T_5M','T_10M','T_15M','T_20M','T_30M']
+        # Prédictions
         up_moves = {}
         down_moves = {}
-        previos_res_df = df[['Open', 'Close']].tail(5).copy()
+        next_candle = df.tail(1)
 
         for target in all_target:
-            bundle = joblib.load(f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
+            bundle = models_bundles[target]
             model = bundle["model"]
-            feature_columns = bundle["features"]
-
-            next_candle = df.loc[:, feature_columns].tail(1)
-            proba = model.predict_proba(next_candle)
+            features = bundle["features"]
+            X = next_candle[features]
+            proba = model.predict_proba(X)
             up_moves[target] = round(proba[:,1][0] * 100, 2)
             down_moves[target] = round(proba[:,0][0] * 100, 2)
 
         up_moves_mean = round(sum(up_moves.values())/len(up_moves), 2) 
         down_moves_mean = round(sum(down_moves.values())/len(down_moves), 2)
         
-        print(f"\nInformation: Confiance: UP {up_moves_mean}% | DOWN {down_moves_mean}%")
+        print(f"\r[{now_dt.strftime('%H:%M:%S')}] Confiance: UP {up_moves_mean}% | DOWN {down_moves_mean}% | Trades: {daily_trade_count}/{MAX_DAILY_TRADES}", end="")
 
         # --- SURVEILLANCE DES FERMETURES ---
-        # NOTE: mt5.positions_get() peut retourner None (pas de tuple vide) -> normaliser
         raw_positions = mt5.positions_get(symbol=SYMBOL)
         current_positions = raw_positions if raw_positions is not None else []
         current_ticket_ids = [p.ticket for p in current_positions]
         
-        # Si on avait une position et qu'on ne l'a plus
         for old_ticket in last_known_positions:
             if old_ticket not in current_ticket_ids:
-                # La position a été fermee ! On récupère le résultat
                 from datetime import timedelta
-                history = mt5.history_deals_get(datetime.now() - timedelta(minutes=5), datetime.now())
+                history = mt5.history_deals_get(datetime.now() - timedelta(minutes=10), datetime.now())
                 if history:
                     for deal in history:
                         if deal.position_id == old_ticket and deal.entry == mt5.DEAL_ENTRY_OUT:
                             profit = deal.profit + deal.commission + deal.swap
-                            status_text = "PROFIT" if profit > 0 else "LOSS"
-                            msg = (f"--- TRADE FERME - {status_text} - {SYMBOL} ---\n\n"
-                                   f"Ticket : `{old_ticket}`\n"
-                                   f"Resultat : *{round(profit, 2)} EUR*\n"
-                                   f"Balance : `{mt5.account_info().balance} EUR`")
+                            msg = (f"--- TRADE FERMÉ ({'PROFIT' if profit > 0 else 'LOSS'}) ---\n"
+                                   f"Ticket: `{old_ticket}` | Gain: `{round(profit, 2)} EUR`")
                             from func import send_telegram_message
                             send_telegram_message(msg)
-                            print(f"[FERMETURE] Ticket {old_ticket} ferme | {status_text} : {round(profit, 2)} EUR")
+                            print(f"\n[FERMETURE] Ticket {old_ticket} fermé: {round(profit, 2)} EUR")
         
         last_known_positions = current_ticket_ids
-        # ------------------------------------
 
-        # Re-fetch frais pour s'assurer que has_position reflète l'état réel
-        fresh_positions = mt5.positions_get(symbol=SYMBOL)
-        nb_positions = len(fresh_positions) if fresh_positions is not None else 0
-        has_position = nb_positions >= MAX_POSITIONS
+        # --- PRISE DE POSITION ---
+        nb_positions = len(current_positions)
+        if nb_positions < MAX_POSITIONS:
+            # Récupérer les directions déjà ouvertes
+            existing_dirs = []
+            for p in current_positions:
+                existing_dirs.append("BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL")
 
-        if has_position:
-            print(f"Information: Limite de {MAX_POSITIONS} positions atteinte ({nb_positions}/{MAX_POSITIONS}). En attente...")
-        elif nb_positions > 0:
-            print(f"Information: {nb_positions}/{MAX_POSITIONS} position(s) ouverte(s). Recherche de signal...")
-        else:
             THRESHOLD = 55
+            signal_direction = None
+            
             if up_moves_mean >= THRESHOLD and up_moves_mean > down_moves_mean:
-                print("Signal BUY detecte!")
-                # Calcul des paramètres (prix, SL, TP, lot)
-                tick = mt5.symbol_info_tick(SYMBOL)
-                pip_info = get_pip_info(mt5, SYMBOL)
-                row = df.iloc[-1]
-                ATR_pips = row["ATR"] / pip_info["pip_size"]
-                SL_pips = max(min(ATR_pips * 1.5, 200), 5)
-                TP_pips = max(min(ATR_pips * 4.5, 400), 10)
-                
-                lot_size = calc_lot_size(mt5.account_info().balance, 1, SL_pips, pip_info["pip_value_per_lot"], 0.01, 2)
-                vol_info = get_symbol_volume_info(mt5, SYMBOL)
-                lot_size = normalize_lot(lot_size, vol_info["min"], vol_info["max"], vol_info["step"])
-
-                entry_buy = tick.ask
-                SL_buy = entry_buy - (SL_pips * pip_info["pip_size"])
-                TP_buy = entry_buy + (TP_pips * pip_info["pip_size"])
-
-                result = place_buy(mt5, SYMBOL, lot_size, entry_buy, SL_buy, TP_buy)
-                log_trade(SYMBOL, "BUY", entry_buy, SL_buy, TP_buy, lot_size, up_moves_mean, down_moves_mean, result)
-
+                signal_direction = "BUY"
             elif down_moves_mean >= THRESHOLD and down_moves_mean > up_moves_mean:
-                print("Signal SELL detecte!")
+                signal_direction = "SELL"
+
+            # Exécution si signal et pas de doublon de direction
+            if signal_direction and signal_direction not in existing_dirs:
+                print(f"\nSignal {signal_direction} détecté ! Exécution...")
                 tick = mt5.symbol_info_tick(SYMBOL)
                 pip_info = get_pip_info(mt5, SYMBOL)
                 row = df.iloc[-1]
                 ATR_pips = row["ATR"] / pip_info["pip_size"]
-                SL_pips = max(min(ATR_pips * 1.5, 200), 5)
-                TP_pips = max(min(ATR_pips * 4.5, 400), 10)
-
-                lot_size = calc_lot_size(mt5.account_info().balance, 1, SL_pips, pip_info["pip_value_per_lot"], 0.01, 2)
+                SL_pips = max(min(ATR_pips * 1.5, 200), 10)
+                TP_pips = max(min(ATR_pips * 4.5, 400), 20)
+                
+                lot_size = calc_lot_size(mt5.account_info().balance, 1.0, SL_pips, pip_info["pip_value_per_lot"], 0.01, 2.0)
                 vol_info = get_symbol_volume_info(mt5, SYMBOL)
                 lot_size = normalize_lot(lot_size, vol_info["min"], vol_info["max"], vol_info["step"])
 
-                entry_sell = tick.bid
-                SL_sell = entry_sell + (SL_pips * pip_info["pip_size"])
-                TP_sell = entry_sell - (TP_pips * pip_info["pip_size"])
+                if signal_direction == "BUY":
+                    entry = tick.ask
+                    sl, tp = entry - (SL_pips * pip_info["pip_size"]), entry + (TP_pips * pip_info["pip_size"])
+                    res = place_buy(mt5, SYMBOL, lot_size, entry, sl, tp)
+                else:
+                    entry = tick.bid
+                    sl, tp = entry + (SL_pips * pip_info["pip_size"]), entry - (TP_pips * pip_info["pip_size"])
+                    res = place_sell(mt5, SYMBOL, lot_size, entry, sl, tp)
 
-                result = place_sell(mt5, SYMBOL, lot_size, entry_sell, SL_sell, TP_sell)
-                log_trade(SYMBOL, "SELL", entry_sell, SL_sell, TP_sell, lot_size, up_moves_mean, down_moves_mean, result)
-
-        print("Sleeping for 10 seconds...")
+                if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                    daily_trade_count += 1
+                    log_trade(SYMBOL, signal_direction, entry, sl, tp, lot_size, up_moves_mean, down_moves_mean, res)
+        
         time.sleep(10)
 
 except KeyboardInterrupt:
-    print("\nBot stopped by user.")
+    print("\nBot arrêté par l'utilisateur.")
 except Exception as e:
-    print(f"\nERREUR: Massive Error: {e}")
+    import traceback
+    print(f"\nERREUR FATALE: {e}")
+    traceback.print_exc()
 finally:
     mt5.shutdown()
