@@ -546,19 +546,13 @@ def get_deepseek_vision_verdict(img_array):
         _, buffer = cv2.imencode('.jpg', img_array)
         img_base64 = base64.b64encode(buffer).decode('utf-8')
         
-        # 2. Requete a l'IA
+        # 2. Requete a l'IA (Format simplifie)
         response = client.chat.completions.create(
-            model="deepseek-vision-v2", # Ou le nom exact du modele vision
+            model="deepseek-chat", # On tente le modele principal qui souvent redirige vers le bon moteur
             messages=[
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Ceci est un graphique de trading EURUSD (ligne de prix). Vois-tu une figure de retournement claire (W, M, Double Top/Bottom) ou une forte tendance ? Reponds uniquement par 'OUI' ou 'NON'."},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"},
-                        },
-                    ],
+                    "content": f"Ceci est un graphique EURUSD (Image Base64). Vois-tu une figure de retournement claire ? Réponds par OUI ou NON.\nImage: data:image/jpeg;base64,{img_base64}"
                 }
             ],
             max_tokens=10
