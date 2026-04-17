@@ -206,9 +206,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("2. Expert MATHEMATIQUE (Standard)", callback_data='train')],
             [InlineKeyboardButton("3. Expert EXPERIENCE (Elite)", callback_data='train_elite')],
             [InlineKeyboardButton("4. Expert VISION (Patterns)", callback_data='train_vision')],
+            [InlineKeyboardButton("5. Lancer un Backtest COMPLET", callback_data='backtest')],
             [InlineKeyboardButton("Retour", callback_data='main_menu')]
         ]
-        await query.edit_message_text("*WORKFLOW ENTRAINEMENT*\n(Etape 1 puis au choix)", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text("*WORKFLOW ENTRAINEMENT & VALIDATION*\n(Suivez les étapes dans l'ordre)", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
 
     if action == 'menu_logs':

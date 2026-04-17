@@ -11,11 +11,17 @@ if sys.stdout.encoding != 'utf-8':
 # Chargement des données de backtest
 full_data = pd.read_csv(f"CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv")
 
-# Test Out-of-sample : On teste sur les 20 derniers % (environ 2 mois - DONNEES INCONNUES)
-test_size = int(len(full_data) * 0.20)
-backtest_data = full_data.tail(test_size).copy()
-
-print(f"Backtest sur {len(backtest_data)} bougies (20% du dataset - Donnees INCONNUES)...")
+# --- DECOUPAGE STRATEGIQUE POUR BACKTEST ---
+# On ne teste que sur les donnees APRES le 1er Janvier 2026
+if 'time' in full_data.columns:
+    full_data['time'] = pd.to_datetime(full_data['time'])
+    backtest_data = full_data[full_data['time'] >= '2026-01-01'].copy()
+    print(f"Backtest sur la periode INCONNUE (Depuis 2026-01-01) : {len(backtest_data)} bougies.")
+else:
+    # Fallback si pas de colonne time
+    test_size = int(len(full_data) * 0.20)
+    backtest_data = full_data.tail(test_size).copy()
+    print(f"Backtest sur les 20 derniers % ({len(backtest_data)} bougies).")
 
 backtest_df = apply_features(backtest_data)
 backtest_df = create_targets(backtest_df)
@@ -27,9 +33,10 @@ main_res = []
 print(f"Debut du Backtest multi-timeframe pour {SYMBOL}...")
 
 for target in all_target:
-    bundle = joblib.load(f"ALL_MODELS/{SYMBOL}_lgbm_{target}.pkl")
-    model = bundle["model"]
-    feature_columns = bundle["features"]
+    # On charge le modele CatBoost (Expert Math)
+    model = joblib.load(f"ALL_MODELS/{SYMBOL}_catboost_{target}.pkl")
+    # Pour CatBoost, on n'a plus besoin de feature_cols separe si le modele les contient
+    feature_columns = model.feature_names_
 
     results = trade_backtest(df=backtest_df, model=model, feature_cols=feature_columns, threshold=55)
     

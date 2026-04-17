@@ -20,6 +20,15 @@ full_data = pd.read_csv(f'CSV_FILES/MT5_5M_BT_{SYMBOL}_Dataset.csv')
 print(f"Preparation des donnees pour {SYMBOL}...")
 df = apply_features(full_data)
 df = create_targets(df)
+
+# --- DECOUPAGE STRATEGIQUE POUR BACKTEST ---
+# On n'entraine que sur les donnees AVANT le 1er Janvier 2026
+if 'time' in df.columns:
+    df['time'] = pd.to_datetime(df['time'])
+    old_size = len(df)
+    df = df[df['time'] < '2026-01-01']
+    print(f"Entrainement bride avant le 2026-01-01 ({len(df)}/{old_size} lignes conservees)")
+
 df.dropna(inplace=True)
 
 all_target = ['T_5M', 'T_10M', 'T_15M', 'T_20M', 'T_30M']
