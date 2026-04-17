@@ -122,22 +122,11 @@ try:
         df = apply_features(data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']].copy())
         df.dropna(inplace=True)
 
-        # Prédictions
-        up_moves = {}
-        down_moves = {}
+        # Prédictions via le Comité d'Experts
         next_candle = df.tail(1)
-
-        for target in all_target:
-            bundle = models_bundles[target]
-            model = bundle["model"]
-            features = bundle["features"]
-            X = next_candle[features]
-            proba = model.predict_proba(X)
-            up_moves[target] = round(proba[:,1][0] * 100, 2)
-            down_moves[target] = round(proba[:,0][0] * 100, 2)
-
-        up_moves_mean = round(sum(up_moves.values())/len(up_moves), 2) 
-        down_moves_mean = round(sum(down_moves.values())/len(down_moves), 2)
+        preds = get_predictions(next_candle)
+        up_moves_mean = round(sum(preds.values()) / len(preds), 2)
+        down_moves_mean = 100 - up_moves_mean # Simplification pour le log si besoin
         
         # --- GESTION DU TRAILING STOP ---
         raw_positions = mt5.positions_get(symbol=SYMBOL)
