@@ -166,20 +166,47 @@ try:
             for p in current_positions:
                 existing_dirs.append("BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL")
 
+            # --- FILTRES DE TIMING (REBOND) ---
             THRESHOLD = 55
             signal_direction = None
             
+            # Recuperation du RSI et des prix actuels pour le timing
+            row = df.iloc[-1]
+            rsi_val = row["RSI"]
+            last_close = row["Close"]
+            tick = mt5.symbol_info_tick(SYMBOL)
+            
+            # Logique de Direction IA
             if up_moves_mean >= THRESHOLD and up_moves_mean > down_moves_mean:
-                signal_direction = "BUY"
-            elif down_moves_mean >= THRESHOLD and down_moves_mean > up_moves_mean:
-                signal_direction = "SELL"
+                # OPTIMISATION BUY : Attendre que le prix rebondisse
+                # 1. Le prix actuel (bid) doit etre superieur a l'ouverture (bougie verte)
+                # 2. Le prix doit etre au-dessus de la clôture de la bougie precedente (rebond confirme)
+                # 3. Le RSI ne doit pas etre deja en sur-achat (> 70)
+                is_rebounding = (tick.bid > row["Open"]) and (tick.bid > last_close)
+                
+                if is_rebounding and rsi_val < 70:
+                    signal_direction = "BUY"
+                else:
+                    if up_moves_mean > 60: # On previent que le signal est la mais attend le timing
+                        print(f" -> Signal BUY en attente de rebond (RSI: {round(rsi_val,1)})")
 
-            # Exécution si signal et pas de doublon de direction
+            elif down_moves_mean >= THRESHOLD and down_moves_mean > up_moves_mean:
+                # OPTIMISATION SELL : Attendre que le prix chute
+                # 1. Le prix actuel (ask) doit etre inferieur a l'ouverture (bougie rouge)
+                # 2. Le prix doit etre sous la clôture precedente
+                # 3. Le RSI ne doit pas etre deja en sur-vente (< 30)
+                is_dropping = (tick.ask < row["Open"]) and (tick.ask < last_close)
+                
+                if is_dropping and rsi_val > 30:
+                    signal_direction = "SELL"
+                else:
+                    if down_moves_mean > 60:
+                        print(f" -> Signal SELL en attente de baisse (RSI: {round(rsi_val,1)})")
+
+            # Exécution si le Timing est validé
             if signal_direction and signal_direction not in existing_dirs:
-                print(f"\nSignal {signal_direction} détecté ! Exécution...")
-                tick = mt5.symbol_info_tick(SYMBOL)
+                print(f"\n[TIMING OK] Signal {signal_direction} confirme par le prix. Execution...")
                 pip_info = get_pip_info(mt5, SYMBOL)
-                row = df.iloc[-1]
                 ATR_pips = row["ATR"] / pip_info["pip_size"]
                 SL_pips = max(min(ATR_pips * 1.5, 200), 10)
                 TP_pips = max(min(ATR_pips * 4.5, 400), 20)
