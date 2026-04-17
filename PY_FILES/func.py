@@ -302,37 +302,42 @@ def trade_backtest(df, model, feature_cols, threshold=55, atr_sl=1.5, atr_tp=4.5
     trades = []
     spread = spread_pips * pip_value
     slippage = slippage_pips * pip_value
-    i = 0 
+    
+    # --- OPTIMISATION VITESSE ---
+    # On prepare les colonnes pour les deux modeles une seule fois
+    X_math = df[feature_cols].values
+    
+    X_elite = None
+    if elite_model is not None:
+        if isinstance(elite_model, dict):
+            actual_elite = elite_model['model']
+            elite_features = elite_model['features']
+        else:
+            actual_elite = elite_model
+            elite_features = actual_elite.feature_names_
+        X_elite = df[elite_features].values
+    else:
+        actual_elite = None
+    # ----------------------------
 
+    i = 0 
     while i < len(df) - 1:
         row = df.iloc[i]
         next_row = df.iloc[i + 1]
-
-        X = row[feature_cols].values.reshape(1, -1)
-        proba = model.predict_proba(X)[0]
+        
+        # Recuperation rapide des probabilités via numpy
+        proba = model.predict_proba(X_math[i:i+1])[0]
         up_conf, down_conf = proba[1] * 100, proba[0] * 100
 
-        # Filtre 1 : Confiance Mathématique (Seuil)
+        # Filtre 1 : Confiance Mathématique
         if max(up_conf, down_conf) < threshold:
             i += 1
             continue
             
-        # Filtre 2 : Expert ELITE (Experience)
-        if elite_model is not None:
-            # On recupere le modele et ses features
-            if isinstance(elite_model, dict):
-                actual_elite = elite_model['model']
-                elite_features = elite_model['features']
-            else:
-                actual_elite = elite_model
-                elite_features = actual_elite.feature_names_
-
-            # On s'assure que les colonnes sont dans le BON ORDRE pour l'elite
-            # On cree un DataFrame d'une seule ligne avec les noms de colonnes
-            X_elite = pd.DataFrame([row[elite_features].values], columns=elite_features)
-            
-            elite_proba = actual_elite.predict_proba(X_elite)[0][1]
-            if elite_proba < 0.50: # Seuil de conviction Elite
+        # Filtre 2 : Expert ELITE (Experience) - Rapide via numpy
+        if actual_elite is not None:
+            elite_proba = actual_elite.predict_proba(X_elite[i:i+1])[0][1]
+            if elite_proba < 0.50:
                 i += 1
                 continue
 
