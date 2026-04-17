@@ -27,8 +27,19 @@ backtest_df = apply_features(backtest_data)
 backtest_df = create_targets(backtest_df)
 backtest_df.dropna(inplace=True)
 
+# --- CHARGEMENT DES MODELES ---
 all_target = ['T_5M', 'T_10M', 'T_15M', 'T_20M', 'T_30M']
 main_res = []
+
+# Chargement de l'Expert Elite pour le filtrage
+import os
+elite_model = None
+elite_path = f"ELITE_MODELS/{SYMBOL}_Elite_Expert.pkl"
+if os.path.exists(elite_path):
+    elite_model = joblib.load(elite_path)
+    print("-> Expert ELITE charge pour le filtrage du Backtest. ✅")
+else:
+    print("-> Expert ELITE non trouve. Backtest standard lance. ⚠️")
 
 print(f"Debut du Backtest multi-timeframe pour {SYMBOL}...")
 
@@ -38,7 +49,14 @@ for target in all_target:
     # Pour CatBoost, on n'a plus besoin de feature_cols separe si le modele les contient
     feature_columns = model.feature_names_
 
-    results = trade_backtest(df=backtest_df, model=model, feature_cols=feature_columns, threshold=55)
+    # Lancement avec le filtre ELITE !
+    results = trade_backtest(
+        df=backtest_df, 
+        model=model, 
+        feature_cols=feature_columns, 
+        threshold=55,
+        elite_model=elite_model
+    )
     
     print(f"\nAnalyse pour {target}:")
     analysis = analyze_results(results)

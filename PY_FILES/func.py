@@ -298,7 +298,7 @@ def create_targets(df, pip_threshold=2.5):
     return df
 
 
-def trade_backtest(df, model, feature_cols, threshold=55, atr_sl=1.5, atr_tp=4.5, spread_pips=1.2, slippage_pips=0.2, pip_value=0.0001):
+def trade_backtest(df, model, feature_cols, threshold=55, atr_sl=1.5, atr_tp=4.5, spread_pips=1.2, slippage_pips=0.2, pip_value=0.0001, elite_model=None):
     trades = []
     spread = spread_pips * pip_value
     slippage = slippage_pips * pip_value
@@ -312,9 +312,19 @@ def trade_backtest(df, model, feature_cols, threshold=55, atr_sl=1.5, atr_tp=4.5
         proba = model.predict_proba(X)[0]
         up_conf, down_conf = proba[1] * 100, proba[0] * 100
 
+        # Filtre 1 : Confiance Mathématique (Seuil)
         if max(up_conf, down_conf) < threshold:
             i += 1
             continue
+            
+        # Filtre 2 : Expert ELITE (Experience)
+        if elite_model is not None:
+            # On utilise les memes colonnes que pour le modele principal 
+            # (Si l'elite a ete entraine avec les memes features)
+            elite_proba = elite_model.predict_proba(X)[0][1]
+            if elite_proba < 0.50: # Seuil de conviction Elite
+                i += 1
+                continue
 
         direction = "BUY" if up_conf > down_conf else "SELL"
         atr = row["ATR"]
