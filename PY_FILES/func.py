@@ -125,6 +125,9 @@ def apply_features(df):
     LOOKBACK = 20
     prev_high = df['High'].shift(1).rolling(LOOKBACK).max()
     prev_low  = df['Low'].shift(1).rolling(LOOKBACK).min()
+    new_cols['prev_high'] = prev_high
+    new_cols['prev_low'] = prev_low
+
     broke_prev_high = (df['High'] > prev_high).astype(int)
     broke_prev_low = (df['Low'] < prev_low).astype(int)
     
@@ -134,21 +137,28 @@ def apply_features(df):
     STRUCT_WINDOW = 15
     struct_high = df['High'].rolling(STRUCT_WINDOW).max()
     struct_low = df['Low'].rolling(STRUCT_WINDOW).min()
+    new_cols['structure_high'] = struct_high
+    new_cols['structure_low'] = struct_low
+
     bos_up = (df['Close'] > struct_high.shift(1)).astype(int)
     bos_down = (df['Close'] < struct_low.shift(1)).astype(int)
     
     new_cols['structure_direction'] = np.where(bos_up == 1, 1, np.where(bos_down == 1, -1, 0))
-    new_cols['structure_high'] = struct_high
 
     FIB_WINDOW = 50
     swing_high = df['High'].rolling(FIB_WINDOW).max()
     swing_low = df['Low'].rolling(FIB_WINDOW).min()
     fib_618 = swing_high - 0.618 * (swing_high - swing_low)
+    fib_50 = swing_high - 0.5 * (swing_high - swing_low)
+    fib_38 = swing_high - 0.382 * (swing_high - swing_low)
     
     new_cols['fib_618_hit'] = ((df['Close'] - fib_618).abs() < threshold).astype(int)
     new_cols['dist_fib_618'] = df['Close'] - fib_618
     new_cols['swing_high'] = swing_high
     new_cols['swing_low'] = swing_low
+    new_cols['fib_618'] = fib_618
+    new_cols['fib_50'] = fib_50
+    new_cols['fib_38'] = fib_38
 
     body = abs(df['Close'] - df['Open'])
     range_val = df['High'] - df['Low']
