@@ -27,7 +27,11 @@ MAX_DAILY_TRADES = 6        # Limite de trades total par jour
 ALLOWED_HOURS = range(7, 21) # Session Londres + New York (7h-20h)
 TRAILING_STOP_ATR_MULT = 1.5 # Distance du trailing (ATR * mult)
 
-starting_daily_balance = mt5.account_info().balance
+account_info_init = mt5.account_info()
+if account_info_init is None:
+    print("ERREUR FATALE: Impossible de récupérer les informations du compte. MT5 est-il connecté au broker ?")
+    quit()
+starting_daily_balance = account_info_init.balance
 current_day = datetime.now().date()
 last_known_positions = [] 
 daily_trade_count = 0       # Compteur de trades du jour
@@ -78,8 +82,13 @@ try:
         # Réinitialisation journalière (Profit/Perte + Compteur de trades)
         if now_dt.date() > current_day:
             print(f"Nouveau jour détecté ({now_dt.date()}). Réinitialisation...")
+            acc_info = mt5.account_info()
+            if acc_info is None:
+                print("ERREUR: Impossible de récupérer le solde. Retry...")
+                time.sleep(10)
+                continue
             current_day = now_dt.date()
-            starting_daily_balance = mt5.account_info().balance
+            starting_daily_balance = acc_info.balance
             daily_trade_count = 0
 
         # 1. Filtre de Session
@@ -98,6 +107,11 @@ try:
 
         # 3. Circuit Breaker (Drawdown)
         account = mt5.account_info()
+        if account is None:
+            print("ERREUR: Impossible de récupérer les informations du compte MT5. Retry...")
+            time.sleep(10)
+            continue
+            
         equity = account.equity
         current_drawdown_pct = ((starting_daily_balance - equity) / starting_daily_balance) * 100
 
@@ -220,7 +234,11 @@ try:
                 SL_pips = max(min(ATR_pips * 1.5, 200), 10)
                 TP_pips = max(min(ATR_pips * 4.5, 400), 20)
                 
-                lot_size = calc_lot_size(mt5.account_info().balance, 1.0, SL_pips, pip_info["pip_value_per_lot"], 0.01, 2.0)
+                acc_info_trade = mt5.account_info()
+                if acc_info_trade is None:
+                    print("\n[ERREUR] Infos compte indisponibles. Annulation trade.")
+                    continue
+                lot_size = calc_lot_size(acc_info_trade.balance, 1.0, SL_pips, pip_info["pip_value_per_lot"], 0.01, 2.0)
                 vol_info = get_symbol_volume_info(mt5, SYMBOL)
                 lot_size = normalize_lot(lot_size, vol_info["min"], vol_info["max"], vol_info["step"])
 

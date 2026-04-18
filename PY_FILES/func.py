@@ -545,6 +545,8 @@ def modify_sl(mt5, ticket, new_sl, symbol):
 
 def check_account_info(mt5):
     account_info = mt5.account_info()
+    if account_info is None:
+        return None
     balance = account_info.balance
     equity = account_info.equity
     currency = account_info.currency
