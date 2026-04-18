@@ -138,6 +138,7 @@ def apply_features(df):
     bos_down = (df['Close'] < struct_low.shift(1)).astype(int)
     
     new_cols['structure_direction'] = np.where(bos_up == 1, 1, np.where(bos_down == 1, -1, 0))
+    new_cols['structure_high'] = struct_high
 
     FIB_WINDOW = 50
     swing_high = df['High'].rolling(FIB_WINDOW).max()
@@ -145,12 +146,22 @@ def apply_features(df):
     fib_618 = swing_high - 0.618 * (swing_high - swing_low)
     
     new_cols['fib_618_hit'] = ((df['Close'] - fib_618).abs() < threshold).astype(int)
+    new_cols['dist_fib_618'] = df['Close'] - fib_618
+    new_cols['swing_high'] = swing_high
+    new_cols['swing_low'] = swing_low
 
     body = abs(df['Close'] - df['Open'])
     range_val = df['High'] - df['Low']
     upper_wick = df['High'] - df[['Open', 'Close']].max(axis=1)
     lower_wick = df[['Open', 'Close']].min(axis=1) - df['Low']
     
+    new_cols['Body'] = body
+    new_cols['Range'] = range_val
+    new_cols['Upper_Wick'] = upper_wick
+    new_cols['Lower_Wick'] = lower_wick
+    new_cols['Close_Position'] = (df['Close'] - df['Low']) / (range_val + 1e-9)
+    new_cols['wick_ratio'] = (upper_wick + lower_wick) / (range_val + 1e-9)
+
     new_cols['Candle_Strength'] = (df['Close'] - df['Open']) / (range_val + 1e-6)
     new_cols['PinBar_Bull'] = ((lower_wick > 2 * body) & (upper_wick < body)).astype(int)
     new_cols['PinBar_Bear'] = ((upper_wick > 2 * body) & (lower_wick < body)).astype(int)
